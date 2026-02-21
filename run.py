@@ -15,19 +15,9 @@ def start_api_server():
     uvicorn.run(app, host="0.0.0.0", port=port, log_level="info")
 
 
-async def _init_database():
-    """Initialize the database and seed config from .env."""
-    import db
-    await db.init_db()
-    await db.sync_env_to_db()
-
-
 def main():
     import config
     import providers
-
-    # Initialize database synchronously before anything else
-    asyncio.run(_init_database())
 
     available = providers.get_available_providers()
 

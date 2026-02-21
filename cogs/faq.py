@@ -2,6 +2,7 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 import db as database
+from utils.permissions import has_command_permission
 
 class FAQ(commands.Cog):
     def __init__(self, bot: commands.Bot):
@@ -20,8 +21,7 @@ class FAQ(commands.Cog):
             keywords = [k.strip().lower() for k in faq['match_keywords'].split(',') if k.strip()]
             if any(k in content for k in keywords):
                 await database.increment_faq_usage(faq['id'])
-                await message.reply(f"**FAQ: {faq['question']}**
-{faq['answer']}")
+                await message.reply(f"**FAQ: {faq['question']}**\n{faq['answer']}")
                 return
 
     @app_commands.command(name="faq", description="Manage FAQ entries")
@@ -37,6 +37,7 @@ class FAQ(commands.Cog):
         app_commands.Choice(name="list", value="list"),
         app_commands.Choice(name="remove", value="remove"),
     ])
+    @has_command_permission()
     async def faq_cmd(
         self, 
         interaction: discord.Interaction, 
@@ -60,15 +61,14 @@ class FAQ(commands.Cog):
         elif action == "list":
             faqs = await database.get_faqs(str(interaction.guild_id))
             if not faqs:
-                await interaction.response.send_message("No FAQs configured for this server.")
+                await interaction.response.send_message("No FAQs configured for this server.", ephemeral=True)
                 return
             
             embed = discord.Embed(title="Server FAQs", color=discord.Color.blue())
             for faq in faqs[:25]: # Embed limit
                 embed.add_field(
                     name=f"ID: {faq['id']} | {faq['question']}",
-                    value=f"Keywords: `{faq['match_keywords']}`
-Used: {faq['times_used']} times",
+                    value=f"Keywords: `{faq['match_keywords']}`\nUsed: {faq['times_used']} times",
                     inline=False
                 )
             await interaction.response.send_message(embed=embed)

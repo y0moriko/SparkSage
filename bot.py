@@ -11,9 +11,14 @@ class SparkSageBot(commands.Bot):
     def __init__(self):
         intents = discord.Intents.default()
         intents.message_content = True
+        intents.members = True
         super().__init__(command_prefix=config.BOT_PREFIX, intents=intents)
 
     async def setup_hook(self):
+        # Initialize database first
+        await database.init_db()
+        await database.sync_env_to_db()
+
         # Load cogs
         initial_extensions = [
             "cogs.general",
@@ -24,7 +29,11 @@ class SparkSageBot(commands.Bot):
             "cogs.permissions",
         ]
         for extension in initial_extensions:
-            await self.load_extension(extension)
+            try:
+                await self.load_extension(extension)
+                print(f"Loaded extension: {extension}")
+            except Exception as e:
+                print(f"Failed to load extension {extension}: {e}")
         
         # Sync slash commands
         try:
@@ -55,10 +64,6 @@ def get_bot_status() -> dict:
 
 @bot.event
 async def on_ready():
-    # Initialize database when bot is ready
-    await database.init_db()
-    await database.sync_env_to_db()
-
     available = providers.get_available_providers()
     primary = config.AI_PROVIDER
     provider_info = config.PROVIDERS.get(primary, {})

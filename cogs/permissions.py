@@ -2,6 +2,7 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 import db as database
+from utils.permissions import has_command_permission
 
 class Permissions(commands.Cog):
     def __init__(self, bot: commands.Bot):
@@ -18,6 +19,7 @@ class Permissions(commands.Cog):
         command="The name of the command to restrict",
         role="The role that will be allowed to use this command"
     )
+    @has_command_permission()
     async def set_permission(self, interaction: discord.Interaction, command: str, role: discord.Role):
         # Validate command name exists in bot
         all_commands = [cmd.name for cmd in self.bot.tree.get_commands()]
@@ -33,11 +35,13 @@ class Permissions(commands.Cog):
         command="The name of the command",
         role="The role to remove"
     )
+    @has_command_permission()
     async def remove_permission(self, interaction: discord.Interaction, command: str, role: discord.Role):
         await database.remove_command_permission(command, str(interaction.guild_id), str(role.id))
         await interaction.response.send_message(f"Removed restriction for {role.mention} on `/{command}`.", ephemeral=True)
 
     @permissions_group.command(name="list", description="List all command restrictions for this server")
+    @has_command_permission()
     async def list_permissions(self, interaction: discord.Interaction):
         perms = await database.get_guild_permissions(str(interaction.guild_id))
         if not perms:

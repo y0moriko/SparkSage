@@ -2,22 +2,25 @@ from __future__ import annotations
 
 import os
 import json
+import asyncio
 import aiosqlite
 
 DATABASE_PATH = os.getenv("DATABASE_PATH", "sparksage.db")
 
-_db: aiosqlite.Connection | None = None
+# Store connections per event loop to avoid thread/loop conflicts
+_db_connections: dict[asyncio.AbstractEventLoop, aiosqlite.Connection] = {}
 
 
 async def get_db() -> aiosqlite.Connection:
-    """Return the shared database connection, creating it if needed."""
-    global _db
-    if _db is None:
-        _db = await aiosqlite.connect(DATABASE_PATH)
-        _db.row_factory = aiosqlite.Row
-        await _db.execute("PRAGMA journal_mode=WAL")
-        await _db.execute("PRAGMA foreign_keys=ON")
-    return _db
+    """Return the shared database connection for the current event loop."""
+    loop = asyncio.get_running_loop()
+    if loop not in _db_connections:
+        conn = await aiosqlite.connect(DATABASE_PATH)
+        conn.row_factory = aiosqlite.Row
+        await conn.execute("PRAGMA journal_mode=WAL")
+        await conn.execute("PRAGMA foreign_keys=ON")
+        _db_connections[loop] = conn
+    return _db_connections[loop]
 
 
 async def init_db():
@@ -360,13 +363,19 @@ async def validate_session(token: str) -> dict | None:
 async def delete_session(token: str):
     """Delete a session."""
     db = await get_db()
-    await db.execute("DELETE FROM sessions WHERE token = ?", (token,))
-    await db.commit()
+    try:
+        await db.execute("DELETE FROM sessions WHERE token = ?", (token,))
+        await db.commit()
+    except Exception:
+        pass
 
 
 async def close_db():
-    """Close the database connection."""
-    global _db
-    if _db:
-        await _db.close()
-        _db = None
+    """Close the database connection for the current loop."""
+    try:
+        loop = asyncio.get_running_loop()
+        if loop in _db_connections:
+            await _db_connections[loop].close()
+            del _db_connections[loop]
+    except RuntimeError:
+        pass
