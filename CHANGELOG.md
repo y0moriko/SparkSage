@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.4.2] - 2026-02-21
+
+### Added
+- **AI-Powered Content Moderation** — Real-time message scanning for toxicity, spam, and rule violations.
+- **`cogs/moderation.py`** — New cog that analyzes messages and flags problematic content to a designated mod-log channel.
+- **Moderation Dashboard Settings** — Added controls to enable/disable moderation, select the mod-log channel, and adjust detection sensitivity.
+- **Moderation Logging** — Persistent storage of flagged messages and AI reasoning in the `moderation_events` table.
+
 ## [0.4.1] - 2026-02-21
 
 ### Added

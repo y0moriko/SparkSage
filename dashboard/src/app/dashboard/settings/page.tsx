@@ -28,6 +28,9 @@ const settingsSchema = z.object({
   DIGEST_ENABLED: z.boolean(),
   DIGEST_CHANNEL_ID: z.string(),
   DIGEST_TIME: z.string().regex(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, "Invalid time format (HH:MM)"),
+  MODERATION_ENABLED: z.boolean(),
+  MOD_LOG_CHANNEL_ID: z.string(),
+  MODERATION_SENSITIVITY: z.enum(["low", "medium", "high"]),
   GEMINI_API_KEY: z.string(),
   GROQ_API_KEY: z.string(),
   OPENROUTER_API_KEY: z.string(),
@@ -49,6 +52,9 @@ const DEFAULTS: SettingsForm = {
   DIGEST_ENABLED: false,
   DIGEST_CHANNEL_ID: "",
   DIGEST_TIME: "09:00",
+  MODERATION_ENABLED: false,
+  MOD_LOG_CHANNEL_ID: "",
+  MODERATION_SENSITIVITY: "medium",
   GEMINI_API_KEY: "",
   GROQ_API_KEY: "",
   OPENROUTER_API_KEY: "",
@@ -78,7 +84,7 @@ export default function SettingsPage() {
           if (config[key] !== undefined) {
             if (key === "MAX_TOKENS") {
               mapped[key] = Number(config[key]);
-            } else if (key === "WELCOME_ENABLED" || key === "DIGEST_ENABLED") {
+            } else if (key === "WELCOME_ENABLED" || key === "DIGEST_ENABLED" || key === "MODERATION_ENABLED") {
               mapped[key] = String(config[key]).toLowerCase() === "true";
             } else {
               (mapped as any)[key] = config[key];
@@ -95,7 +101,6 @@ export default function SettingsPage() {
     if (!token) return;
     setSaving(true);
     try {
-      // Convert to string values for the API, skip masked values (***...)
       const payload: Record<string, string> = {};
       for (const [key, val] of Object.entries(values)) {
         const strVal = String(val);
@@ -120,6 +125,8 @@ export default function SettingsPage() {
   const systemPrompt = form.watch("SYSTEM_PROMPT");
   const welcomeEnabled = form.watch("WELCOME_ENABLED");
   const digestEnabled = form.watch("DIGEST_ENABLED");
+  const moderationEnabled = form.watch("MODERATION_ENABLED");
+  const moderationSensitivity = form.watch("MODERATION_SENSITIVITY");
 
   if (loading) {
     return (
@@ -149,15 +156,9 @@ export default function SettingsPage() {
           <CardContent className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="discord-token">Bot Token</Label>
-              <Input
-                id="discord-token"
-                type="password"
-                {...form.register("DISCORD_TOKEN")}
-              />
+              <Input id="discord-token" type="password" {...form.register("DISCORD_TOKEN")} />
               {form.formState.errors.DISCORD_TOKEN && (
-                <p className="text-xs text-destructive">
-                  {form.formState.errors.DISCORD_TOKEN.message}
-                </p>
+                <p className="text-xs text-destructive">{form.formState.errors.DISCORD_TOKEN.message}</p>
               )}
             </div>
           </CardContent>
@@ -192,23 +193,11 @@ export default function SettingsPage() {
               <>
                 <div className="space-y-2">
                   <Label htmlFor="welcome-channel">Welcome Channel ID</Label>
-                  <Input
-                    id="welcome-channel"
-                    placeholder="e.g. 1234567890..."
-                    {...form.register("WELCOME_CHANNEL_ID")}
-                  />
-                  <p className="text-[10px] text-muted-foreground">The ID of the channel where welcome messages will be posted.</p>
+                  <Input id="welcome-channel" placeholder="e.g. 1234567890..." {...form.register("WELCOME_CHANNEL_ID")} />
                 </div>
-
                 <div className="space-y-2">
                   <Label htmlFor="welcome-message">Welcome Message Template</Label>
-                  <Textarea
-                    id="welcome-message"
-                    placeholder="Welcome {user} to {server}!"
-                    {...form.register("WELCOME_MESSAGE")}
-                    rows={3}
-                  />
-                  <p className="text-[10px] text-muted-foreground">Use <code>{'{user}'}</code> and <code>{'{server}'}</code> as placeholders.</p>
+                  <Textarea id="welcome-message" {...form.register("WELCOME_MESSAGE")} rows={3} />
                 </div>
               </>
             )}
@@ -244,28 +233,68 @@ export default function SettingsPage() {
               <>
                 <div className="space-y-2">
                   <Label htmlFor="digest-channel">Digest Channel ID</Label>
-                  <Input
-                    id="digest-channel"
-                    placeholder="e.g. 1234567890..."
-                    {...form.register("DIGEST_CHANNEL_ID")}
-                  />
-                  <p className="text-[10px] text-muted-foreground">The ID of the channel where the daily summary will be posted.</p>
+                  <Input id="digest-channel" placeholder="e.g. 1234567890..." {...form.register("DIGEST_CHANNEL_ID")} />
                 </div>
-
                 <div className="space-y-2">
                   <Label htmlFor="digest-time">Digest Time (24h format)</Label>
-                  <Input
-                    id="digest-time"
-                    placeholder="09:00"
-                    {...form.register("DIGEST_TIME")}
-                    className="w-32"
-                  />
-                  {form.formState.errors.DIGEST_TIME && (
-                    <p className="text-xs text-destructive">
-                      {form.formState.errors.DIGEST_TIME.message}
-                    </p>
-                  )}
-                  <p className="text-[10px] text-muted-foreground">The time of day to post the summary (e.g., 09:00 or 21:30).</p>
+                  <Input id="digest-time" placeholder="09:00" {...form.register("DIGEST_TIME")} className="w-32" />
+                </div>
+              </>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* AI Moderation Settings */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">AI Moderation</CardTitle>
+            <CardDescription>Flag potentially toxic or rule-breaking content for review.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="space-y-3">
+              <Label>Enable AI Moderation</Label>
+              <RadioGroup 
+                value={moderationEnabled ? "true" : "false"} 
+                onValueChange={(val) => form.setValue("MODERATION_ENABLED", val === "true")}
+                className="flex gap-4"
+              >
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="true" id="mod-on" />
+                  <Label htmlFor="mod-on" className="font-normal">On</Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="false" id="mod-off" />
+                  <Label htmlFor="mod-off" className="font-normal">Off</Label>
+                </div>
+              </RadioGroup>
+            </div>
+
+            {moderationEnabled && (
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="mod-channel">Mod Log Channel ID</Label>
+                  <Input id="mod-channel" placeholder="e.g. 1234567890..." {...form.register("MOD_LOG_CHANNEL_ID")} />
+                </div>
+                <div className="space-y-3">
+                  <Label>Sensitivity</Label>
+                  <RadioGroup 
+                    value={moderationSensitivity} 
+                    onValueChange={(val) => form.setValue("MODERATION_SENSITIVITY", val as any)}
+                    className="flex flex-col gap-2"
+                  >
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="low" id="sens-low" />
+                      <Label htmlFor="sens-low" className="font-normal">Low</Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="medium" id="sens-med" />
+                      <Label htmlFor="sens-med" className="font-normal">Medium</Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="high" id="sens-high" />
+                      <Label htmlFor="sens-high" className="font-normal">High</Label>
+                    </div>
+                  </RadioGroup>
                 </div>
               </>
             )}
@@ -280,48 +309,19 @@ export default function SettingsPage() {
           <CardContent className="space-y-6">
             <div className="space-y-2">
               <Label htmlFor="prefix">Command Prefix</Label>
-              <Input
-                id="prefix"
-                {...form.register("BOT_PREFIX")}
-                className="w-24"
-              />
-              {form.formState.errors.BOT_PREFIX && (
-                <p className="text-xs text-destructive">
-                  {form.formState.errors.BOT_PREFIX.message}
-                </p>
-              )}
+              <Input id="prefix" {...form.register("BOT_PREFIX")} className="w-24" />
             </div>
-
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <Label>Max Tokens</Label>
-                <span className="text-sm font-mono tabular-nums text-muted-foreground">
-                  {maxTokens}
-                </span>
+                <span className="text-sm font-mono text-muted-foreground">{maxTokens}</span>
               </div>
-              <Slider
-                value={[maxTokens]}
-                onValueChange={([val]) => form.setValue("MAX_TOKENS", val)}
-                min={128}
-                max={4096}
-                step={64}
-              />
+              <Slider value={[maxTokens]} onValueChange={([val]) => form.setValue("MAX_TOKENS", val)} min={128} max={4096} step={64} />
             </div>
-
             <Separator />
-
             <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label htmlFor="system-prompt">System Prompt</Label>
-                <span className="text-xs text-muted-foreground">
-                  {systemPrompt?.length || 0} characters
-                </span>
-              </div>
-              <Textarea
-                id="system-prompt"
-                {...form.register("SYSTEM_PROMPT")}
-                rows={4}
-              />
+              <Label htmlFor="system-prompt">System Prompt</Label>
+              <Textarea id="system-prompt" {...form.register("SYSTEM_PROMPT")} rows={4} />
             </div>
           </CardContent>
         </Card>
@@ -332,37 +332,17 @@ export default function SettingsPage() {
             <CardTitle className="text-base">API Keys</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <p className="text-xs text-muted-foreground">
-              Masked values (***...) are not overwritten on save. Enter a new value to update.
-            </p>
-            {(
-              [
-                ["GEMINI_API_KEY", "Gemini"],
-                ["GROQ_API_KEY", "Groq"],
-                ["OPENROUTER_API_KEY", "OpenRouter"],
-                ["ANTHROPIC_API_KEY", "Anthropic"],
-                ["OPENAI_API_KEY", "OpenAI"],
-              ] as const
-            ).map(([key, label]) => (
+            {[["GEMINI_API_KEY", "Gemini"], ["GROQ_API_KEY", "Groq"], ["OPENROUTER_API_KEY", "OpenRouter"], ["ANTHROPIC_API_KEY", "Anthropic"], ["OPENAI_API_KEY", "OpenAI"]].map(([key, label]) => (
               <div key={key} className="space-y-1">
                 <Label htmlFor={key}>{label}</Label>
-                <Input
-                  id={key}
-                  type="password"
-                  {...form.register(key)}
-                  className="font-mono text-sm"
-                />
+                <Input id={key} type="password" {...form.register(key as any)} className="font-mono text-sm" />
               </div>
             ))}
           </CardContent>
         </Card>
 
         <Button type="submit" disabled={saving} className="w-full">
-          {saving ? (
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-          ) : (
-            <Save className="mr-2 h-4 w-4" />
-          )}
+          {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
           Save Settings
         </Button>
       </form>

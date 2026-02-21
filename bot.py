@@ -28,6 +28,7 @@ class SparkSageBot(commands.Bot):
             "cogs.onboarding",
             "cogs.permissions",
             "cogs.digest",
+            "cogs.moderation",
         ]
         for extension in initial_extensions:
             try:
