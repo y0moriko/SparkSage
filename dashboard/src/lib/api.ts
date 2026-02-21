@@ -67,6 +67,12 @@ export interface BotStatus {
   uptime?: number | null;
 }
 
+export interface DiscordChannel {
+  id: string;
+  name: string;
+  type: string;
+}
+
 export interface CommandPermission {
   command_name: string;
   guild_id: string;
@@ -94,6 +100,12 @@ export interface ChannelPrompt {
   channel_id: string;
   guild_id: string;
   system_prompt: string;
+}
+
+export interface ChannelProvider {
+  channel_id: string;
+  guild_id: string;
+  provider_name: string;
 }
 
 export const api = {
@@ -139,6 +151,9 @@ export const api = {
   // Bot
   getBotStatus: (token: string) =>
     apiFetch<BotStatus>("/api/bot/status", { token }),
+
+  getGuildChannels: (token: string, guildId: string) =>
+    apiFetch<{ channels: DiscordChannel[] }>(`/api/bot/guilds/${guildId}/channels`, { token }),
 
   // Conversations
   getConversations: (token: string) =>
@@ -214,6 +229,23 @@ export const api = {
 
   deleteChannelPrompt: (token: string, channelId: string) =>
     apiFetch<{ status: string }>(`/api/prompts/${channelId}`, {
+      method: "DELETE",
+      token,
+    }),
+
+  // Channel Providers
+  getChannelProviders: (token: string) =>
+    apiFetch<{ providers: ChannelProvider[] }>("/api/prompts/providers", { token }),
+
+  setChannelProvider: (token: string, data: ChannelProvider) =>
+    apiFetch<{ status: string }>("/api/prompts/providers", {
+      method: "POST",
+      body: JSON.stringify(data),
+      token,
+    }),
+
+  deleteChannelProvider: (token: string, channelId: string) =>
+    apiFetch<{ status: string }>(`/api/prompts/providers/${channelId}`, {
       method: "DELETE",
       token,
     }),
