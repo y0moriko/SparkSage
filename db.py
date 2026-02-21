@@ -14,13 +14,17 @@ _db_connections: dict[asyncio.AbstractEventLoop, aiosqlite.Connection] = {}
 async def get_db() -> aiosqlite.Connection:
     """Return the shared database connection for the current event loop."""
     loop = asyncio.get_running_loop()
-    if loop not in _db_connections:
+    
+    # Check if we have a connection and if it's still open
+    conn = _db_connections.get(loop)
+    if conn is None:
         conn = await aiosqlite.connect(DATABASE_PATH)
         conn.row_factory = aiosqlite.Row
         await conn.execute("PRAGMA journal_mode=WAL")
         await conn.execute("PRAGMA foreign_keys=ON")
         _db_connections[loop] = conn
-    return _db_connections[loop]
+    
+    return conn
 
 
 async def init_db():
@@ -74,6 +78,18 @@ async def init_db():
             guild_id     TEXT NOT NULL,
             role_id      TEXT NOT NULL,
             PRIMARY KEY (command_name, guild_id, role_id)
+        );
+
+        CREATE TABLE IF NOT EXISTS moderation_events (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            guild_id        TEXT    NOT NULL,
+            channel_id      TEXT    NOT NULL,
+            user_id         TEXT    NOT NULL,
+            user_name       TEXT    NOT NULL,
+            message_content TEXT    NOT NULL,
+            reason          TEXT    NOT NULL,
+            severity        TEXT    NOT NULL,
+            created_at      TEXT    DEFAULT (datetime('now'))
         );
 
         INSERT OR IGNORE INTO wizard_state (id) VALUES (1);
@@ -154,6 +170,9 @@ async def sync_env_to_db():
         "DIGEST_ENABLED": "true" if cfg.DIGEST_ENABLED else "false",
         "DIGEST_CHANNEL_ID": cfg.DIGEST_CHANNEL_ID,
         "DIGEST_TIME": cfg.DIGEST_TIME,
+        "MODERATION_ENABLED": "true" if cfg.MODERATION_ENABLED else "false",
+        "MOD_LOG_CHANNEL_ID": cfg.MOD_LOG_CHANNEL_ID,
+        "MODERATION_SENSITIVITY": cfg.MODERATION_SENSITIVITY,
     }
     # Only insert keys that don't already exist in DB (don't overwrite user edits)
     db = await get_db()
@@ -301,6 +320,30 @@ async def get_guild_permissions(guild_id: str) -> list[dict]:
         "SELECT * FROM command_permissions WHERE guild_id = ?",
         (guild_id,),
     )
+    rows = await cursor.fetchall()
+    return [dict(row) for row in rows]
+
+
+# --- Moderation helpers ---
+
+
+async def add_moderation_event(guild_id: str, channel_id: str, user_id: str, user_name: str, message_content: str, reason: str, severity: str):
+    """Log a moderation event."""
+    db = await get_db()
+    await db.execute(
+        "INSERT INTO moderation_events (guild_id, channel_id, user_id, user_name, message_content, reason, severity) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (guild_id, channel_id, user_id, user_name, message_content, reason, severity),
+    )
+    await db.commit()
+
+
+async def get_moderation_events(guild_id: str | None = None, limit: int = 50) -> list[dict]:
+    """Get recent moderation events."""
+    db = await get_db()
+    if guild_id:
+        cursor = await db.execute("SELECT * FROM moderation_events WHERE guild_id = ? ORDER BY id DESC LIMIT ?", (guild_id, limit))
+    else:
+        cursor = await db.execute("SELECT * FROM moderation_events ORDER BY id DESC LIMIT ?", (limit,))
     rows = await cursor.fetchall()
     return [dict(row) for row in rows]
 
