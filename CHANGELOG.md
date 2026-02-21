@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.3.3] - 2026-02-21
+
+### Added
+- **FAQ Auto-Detection System** — New system that automatically detects and answers frequently asked questions based on keywords.
+- **`cogs/faq.py`** — New cog with `/faq` management commands and a message listener for keyword matching.
+- **FAQ Management Page** — New dashboard page for creating, listing, and deleting FAQ entries with usage tracking.
+- **`faqs` Database Table** — Persistent storage for FAQ entries, keywords, and usage statistics.
+- **FAQ API Endpoints** — New backend routes for managing FAQs from the dashboard.
+
 ## [0.3.2] - 2026-02-21
 
 ### Added

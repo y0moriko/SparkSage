@@ -72,6 +72,17 @@ export interface TestProviderResult {
   latency_ms?: number;
 }
 
+export interface FAQItem {
+  id: number;
+  guild_id: string;
+  question: string;
+  answer: string;
+  match_keywords: string;
+  times_used: number;
+  created_by: string | null;
+  created_at: string;
+}
+
 export const api = {
   // Auth
   login: (password: string) =>
@@ -140,6 +151,23 @@ export const api = {
     apiFetch<{ status: string }>("/api/wizard/complete", {
       method: "POST",
       body: JSON.stringify({ config: data }),
+      token,
+    }),
+
+  // FAQs
+  getFAQs: (token: string) =>
+    apiFetch<{ faqs: FAQItem[] }>("/api/faqs", { token }),
+
+  createFAQ: (token: string, data: Omit<FAQItem, "id" | "times_used" | "created_at" | "created_by">) =>
+    apiFetch<{ status: string }>("/api/faqs", {
+      method: "POST",
+      body: JSON.stringify(data),
+      token,
+    }),
+
+  deleteFAQ: (token: string, id: number) =>
+    apiFetch<{ status: string }>(`/api/faqs/${id}`, {
+      method: "DELETE",
       token,
     }),
 };

@@ -11,6 +11,7 @@ import {
   MessageSquare,
   Wand2,
   LogOut,
+  HelpCircle,
 } from "lucide-react";
 import {
   Sidebar,
@@ -29,6 +30,7 @@ import { Button } from "@/components/ui/button";
 const NAV_ITEMS = [
   { title: "Overview", href: "/dashboard", icon: LayoutDashboard },
   { title: "Providers", href: "/dashboard/providers", icon: Cpu },
+  { title: "FAQs", href: "/dashboard/faqs", icon: HelpCircle },
   { title: "Settings", href: "/dashboard/settings", icon: Settings },
   { title: "Conversations", href: "/dashboard/conversations", icon: MessageSquare },
 ];
