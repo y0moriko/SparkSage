@@ -25,15 +25,19 @@ class Moderation(commands.Cog):
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
-        if not getattr(config, "MODERATION_ENABLED", False) or not getattr(config, "MOD_LOG_CHANNEL_ID", ""):
+        # Use getattr for safety in case config isn't fully reloaded yet
+        enabled = getattr(config, "MODERATION_ENABLED", False)
+        log_channel_id = getattr(config, "MOD_LOG_CHANNEL_ID", "")
+        
+        if not enabled or not log_channel_id:
             return
         
         if message.author.bot or not message.guild or not message.content:
             return
 
-        # Skip if message is from an administrator
-        if message.author.guild_permissions.administrator:
-            return
+        # Skip if message is from an administrator (DISABLED FOR TESTING)
+        # if message.author.guild_permissions.administrator:
+        #     return
 
         # Run AI moderation check in background
         asyncio.create_task(self.check_message(message))
@@ -43,38 +47,37 @@ class Moderation(commands.Cog):
         prompt = MODERATION_PROMPT.format(sensitivity=sensitivity)
         messages = [{"role": "user", "content": message.content}]
         
+        print(f"DEBUG: Checking message: '{message.content}' with sensitivity: {sensitivity}")
+        
         try:
             response_text, _ = providers.chat(messages, prompt)
+            print(f"DEBUG: AI Response: {response_text}")
             
-            # Clean response text in case AI added markdown or extra text
+            # Clean response text
             cleaned_json = response_text.strip()
-            if "```json" in cleaned_json:
-                cleaned_json = cleaned_json.split("```json")[1].split("```")[0].strip()
-            elif "```" in cleaned_json:
-                cleaned_json = cleaned_json.split("```")[1].split("```")[0].strip()
-            
-            # Remove any stray characters before/after the JSON object
+            # Find the first { and last }
             start_idx = cleaned_json.find('{')
             end_idx = cleaned_json.rfind('}')
+            
             if start_idx != -1 and end_idx != -1:
                 cleaned_json = cleaned_json[start_idx:end_idx+1]
-            
-            result = json.loads(cleaned_json)
-            
-            if result.get("flagged"):
-                await self.log_flagged_message(message, result)
+                result = json.loads(cleaned_json)
+                
+                print(f"DEBUG: Parsed Result: flagged={result.get('flagged')}, severity={result.get('severity')}")
+                
+                if result.get("flagged"):
+                    await self.log_flagged_message(message, result)
                 
         except Exception as e:
-            # We don't want moderation errors to spam logs or crash the bot
             print(f"Moderation Error: {e}")
 
     async def log_flagged_message(self, message: discord.Message, result: dict):
         try:
-            channel_id_str = getattr(config, "MOD_LOG_CHANNEL_ID", "")
-            if not channel_id_str:
+            log_channel_id = getattr(config, "MOD_LOG_CHANNEL_ID", "")
+            if not log_channel_id:
                 return
                 
-            channel_id = int(channel_id_str)
+            channel_id = int(log_channel_id)
             log_channel = self.bot.get_channel(channel_id)
             
             if not log_channel:
@@ -87,7 +90,8 @@ class Moderation(commands.Cog):
             reason = result.get("reason", "Unknown reason")
             severity = result.get("severity", "medium").lower()
             
-            # Color based on severity
+            print(f"DEBUG: Logging to channel {channel_id}")
+            
             colors = {
                 "low": discord.Color.blue(),
                 "medium": discord.Color.orange(),
@@ -106,12 +110,8 @@ class Moderation(commands.Cog):
             embed.add_field(name="Severity", value=severity.upper(), inline=True)
             embed.add_field(name="Reason", value=reason, inline=False)
             
-            # Add buttons for actions
-            view = discord.ui.View()
-            view.add_item(discord.ui.Button(label="Keep", style=discord.ButtonStyle.secondary, custom_id="mod_keep"))
-            view.add_item(discord.ui.Button(label="Delete", style=discord.ButtonStyle.danger, custom_id="mod_delete"))
-            
-            await log_channel.send(embed=embed, view=view)
+            await log_channel.send(embed=embed)
+            print("DEBUG: Mod log message sent!")
             
             # Save to DB
             await database.add_moderation_event(
