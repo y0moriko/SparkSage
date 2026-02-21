@@ -90,6 +90,12 @@ export interface FAQItem {
   created_at: string;
 }
 
+export interface ChannelOverride {
+  channel_id: string;
+  system_prompt: string | null;
+  provider_name: string | null;
+}
+
 export const api = {
   // Auth
   login: (password: string) =>
@@ -191,6 +197,23 @@ export const api = {
 
   removePermission: (token: string, commandName: string, guildId: string, roleId: string) =>
     apiFetch<{ status: string }>(`/api/permissions?command_name=${commandName}&guild_id=${guildId}&role_id=${roleId}`, {
+      method: "DELETE",
+      token,
+    }),
+
+  // Channels
+  getChannelOverrides: (token: string) =>
+    apiFetch<{ overrides: ChannelOverride[] }>("/api/channels/overrides", { token }),
+
+  setChannelOverride: (token: string, data: ChannelOverride) =>
+    apiFetch<{ status: string }>("/api/channels/overrides", {
+      method: "POST",
+      body: JSON.stringify(data),
+      token,
+    }),
+
+  deleteChannelOverride: (token: string, channelId: string) =>
+    apiFetch<{ status: string }>(`/api/channels/overrides/${channelId}`, {
       method: "DELETE",
       token,
     }),

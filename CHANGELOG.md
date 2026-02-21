@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.4.4] - 2026-02-21
+
+### Added
+- **Per-Channel AI Overrides** — Configure unique system prompts and force specific AI providers on a per-channel basis.
+- **Channel Settings Page** — New dashboard page for managing AI behavior overrides for individual Discord channels.
+- **Channel Overrides API** — Backend infrastructure for storing and retrieving channel-specific configuration.
+- **`channel_overrides` Database Table** — Persistent storage for per-channel AI settings.
+
+### Changed
+- **`utils/bot_utils.py`** — Enhanced `ask_ai` logic to dynamically apply channel overrides before global settings.
+
 ## [0.4.3] - 2026-02-21
 
 ### Added

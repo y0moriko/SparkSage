@@ -14,17 +14,13 @@ _db_connections: dict[asyncio.AbstractEventLoop, aiosqlite.Connection] = {}
 async def get_db() -> aiosqlite.Connection:
     """Return the shared database connection for the current event loop."""
     loop = asyncio.get_running_loop()
-    
-    # Check if we have a connection and if it's still open
-    conn = _db_connections.get(loop)
-    if conn is None:
+    if loop not in _db_connections or _db_connections[loop].io_task.done():
         conn = await aiosqlite.connect(DATABASE_PATH)
         conn.row_factory = aiosqlite.Row
         await conn.execute("PRAGMA journal_mode=WAL")
         await conn.execute("PRAGMA foreign_keys=ON")
         _db_connections[loop] = conn
-    
-    return conn
+    return _db_connections[loop]
 
 
 async def init_db():
@@ -90,6 +86,12 @@ async def init_db():
             reason          TEXT    NOT NULL,
             severity        TEXT    NOT NULL,
             created_at      TEXT    DEFAULT (datetime('now'))
+        );
+
+        CREATE TABLE IF NOT EXISTS channel_overrides (
+            channel_id    TEXT PRIMARY KEY,
+            system_prompt TEXT,
+            provider_name TEXT
         );
 
         INSERT OR IGNORE INTO wizard_state (id) VALUES (1);
@@ -349,6 +351,43 @@ async def get_moderation_events(guild_id: str | None = None, limit: int = 50) ->
         cursor = await db.execute("SELECT * FROM moderation_events ORDER BY id DESC LIMIT ?", (limit,))
     rows = await cursor.fetchall()
     return [dict(row) for row in rows]
+
+
+# --- Channel Override helpers ---
+
+
+async def set_channel_override(channel_id: str, system_prompt: str | None = None, provider_name: str | None = None):
+    """Set per-channel AI overrides."""
+    db = await get_db()
+    await db.execute(
+        "INSERT INTO channel_overrides (channel_id, system_prompt, provider_name) VALUES (?, ?, ?) "
+        "ON CONFLICT(channel_id) DO UPDATE SET system_prompt = excluded.system_prompt, provider_name = excluded.provider_name",
+        (channel_id, system_prompt, provider_name),
+    )
+    await db.commit()
+
+
+async def get_channel_override(channel_id: str) -> dict | None:
+    """Get AI overrides for a specific channel."""
+    db = await get_db()
+    cursor = await db.execute("SELECT * FROM channel_overrides WHERE channel_id = ?", (channel_id,))
+    row = await cursor.fetchone()
+    return dict(row) if row else None
+
+
+async def list_channel_overrides() -> list[dict]:
+    """List all channel overrides."""
+    db = await get_db()
+    cursor = await db.execute("SELECT * FROM channel_overrides")
+    rows = await cursor.fetchall()
+    return [dict(row) for row in rows]
+
+
+async def delete_channel_override(channel_id: str):
+    """Delete AI overrides for a channel."""
+    db = await get_db()
+    await db.execute("DELETE FROM channel_overrides WHERE channel_id = ?", (channel_id,))
+    await db.commit()
 
 
 # --- Wizard helpers ---
