@@ -26,7 +26,14 @@ class Translate(commands.Cog):
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
         enabled = getattr(config, "TRANSLATION_ENABLED", False)
-        if not enabled or message.author.bot or not message.guild or not message.content:
+        channel_ids = getattr(config, "TRANSLATION_CHANNEL_IDS", "")
+        
+        if not enabled or not channel_ids or message.author.bot or not message.guild or not message.content:
+            return
+
+        # Check if current channel is designated for translation
+        allowed_channels = [c.strip() for c in channel_ids.split(",") if c.strip()]
+        if str(message.channel.id) not in allowed_channels:
             return
 
         # Skip commands

@@ -175,6 +175,7 @@ async def sync_env_to_db():
         "MODERATION_SENSITIVITY": getattr(cfg, "MODERATION_SENSITIVITY", "medium"),
         "TRANSLATION_ENABLED": "true" if getattr(cfg, "TRANSLATION_ENABLED", False) else "false",
         "TRANSLATION_TARGET_LANG": getattr(cfg, "TRANSLATION_TARGET_LANG", "English"),
+        "TRANSLATION_CHANNEL_IDS": getattr(cfg, "TRANSLATION_CHANNEL_IDS", ""),
     }
     # Only insert keys that don't already exist in DB (don't overwrite user edits)
     db = await get_db()

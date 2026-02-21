@@ -58,6 +58,7 @@ MODERATION_SENSITIVITY = os.getenv("MODERATION_SENSITIVITY", "medium") # low, me
 # Translation settings
 TRANSLATION_ENABLED = os.getenv("TRANSLATION_ENABLED", "false").lower() == "true"
 TRANSLATION_TARGET_LANG = os.getenv("TRANSLATION_TARGET_LANG", "English")
+TRANSLATION_CHANNEL_IDS = os.getenv("TRANSLATION_CHANNEL_IDS", "") # Comma-separated IDs
 
 # Dashboard settings
 DATABASE_PATH = os.getenv("DATABASE_PATH", "sparksage.db")
@@ -147,6 +148,7 @@ def reload_from_db(db_config: dict[str, str]):
         "MODERATION_SENSITIVITY": str,
         "TRANSLATION_ENABLED": lambda v: str(v).lower() == "true",
         "TRANSLATION_TARGET_LANG": str,
+        "TRANSLATION_CHANNEL_IDS": str,
         "ADMIN_PASSWORD": str,
         "DISCORD_CLIENT_ID": str,
         "DISCORD_CLIENT_SECRET": str,

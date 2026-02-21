@@ -33,6 +33,7 @@ const settingsSchema = z.object({
   MODERATION_SENSITIVITY: z.enum(["low", "medium", "high"]),
   TRANSLATION_ENABLED: z.boolean(),
   TRANSLATION_TARGET_LANG: z.string(),
+  TRANSLATION_CHANNEL_IDS: z.string(),
   GEMINI_API_KEY: z.string(),
   GROQ_API_KEY: z.string(),
   OPENROUTER_API_KEY: z.string(),
@@ -59,6 +60,7 @@ const DEFAULTS: SettingsForm = {
   MODERATION_SENSITIVITY: "medium",
   TRANSLATION_ENABLED: false,
   TRANSLATION_TARGET_LANG: "English",
+  TRANSLATION_CHANNEL_IDS: "",
   GEMINI_API_KEY: "",
   GROQ_API_KEY: "",
   OPENROUTER_API_KEY: "",
@@ -337,11 +339,18 @@ export default function SettingsPage() {
             </div>
 
             {translationEnabled && (
-              <div className="space-y-2">
-                <Label htmlFor="trans-lang">Target Language</Label>
-                <Input id="trans-lang" placeholder="English" {...form.register("TRANSLATION_TARGET_LANG")} />
-                <p className="text-[10px] text-muted-foreground">Messages will be translated into this language.</p>
-              </div>
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="trans-lang">Target Language</Label>
+                  <Input id="trans-lang" placeholder="English" {...form.register("TRANSLATION_TARGET_LANG")} />
+                  <p className="text-[10px] text-muted-foreground">Messages will be translated into this language.</p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="trans-channels">Designated Channel IDs</Label>
+                  <Input id="trans-channels" placeholder="e.g. 1234, 5678 (comma separated)" {...form.register("TRANSLATION_CHANNEL_IDS")} />
+                  <p className="text-[10px] text-muted-foreground">Only messages in these channels will be auto-translated.</p>
+                </div>
+              </>
             )}
           </CardContent>
         </Card>
