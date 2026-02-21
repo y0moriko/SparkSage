@@ -31,19 +31,22 @@ class Translate(commands.Cog):
         if not enabled or not channel_ids or message.author.bot or not message.guild or not message.content:
             return
 
-        # Check if current channel is designated for translation
-        allowed_channels = [c.strip() for c in channel_ids.split(",") if c.strip()]
-        if str(message.channel.id) not in allowed_channels:
-            return
-
         # Skip commands
         if message.content.startswith(getattr(config, "BOT_PREFIX", "!")):
             return
 
-        # Simple heuristic: skip short messages
+        # Check if current channel is designated for translation
+        # '*' means all channels
+        if channel_ids.strip() != "*":
+            allowed_channels = [c.strip() for c in channel_ids.split(",") if c.strip()]
+            if str(message.channel.id) not in allowed_channels:
+                return
+
+        # Simple heuristic: skip short messages (less than 10 chars)
         if len(message.content) < 10:
             return
 
+        print(f"DEBUG: Auto-translating message in #{message.channel.name} ({message.channel.id})")
         asyncio.create_task(self.auto_translate(message))
 
     async def auto_translate(self, message: discord.Message):

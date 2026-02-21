@@ -347,8 +347,8 @@ export default function SettingsPage() {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="trans-channels">Designated Channel IDs</Label>
-                  <Input id="trans-channels" placeholder="e.g. 1234, 5678 (comma separated)" {...form.register("TRANSLATION_CHANNEL_IDS")} />
-                  <p className="text-[10px] text-muted-foreground">Only messages in these channels will be auto-translated.</p>
+                  <Input id="trans-channels" placeholder="e.g. 1234, 5678 or *" {...form.register("TRANSLATION_CHANNEL_IDS")} />
+                  <p className="text-[10px] text-muted-foreground">Only messages in these channels will be auto-translated. Use <code>*</code> for all channels.</p>
                 </div>
               </>
             )}
