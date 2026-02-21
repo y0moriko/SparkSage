@@ -36,6 +36,7 @@ async def init_db():
             role       TEXT    NOT NULL,
             content    TEXT    NOT NULL,
             provider   TEXT,
+            category   TEXT,
             created_at TEXT    NOT NULL DEFAULT (datetime('now'))
         );
         CREATE INDEX IF NOT EXISTS idx_conv_channel ON conversations(channel_id);
@@ -57,6 +58,13 @@ async def init_db():
         INSERT OR IGNORE INTO wizard_state (id) VALUES (1);
         """
     )
+    
+    # Migration: Add category column if it doesn't exist
+    try:
+        await db.execute("ALTER TABLE conversations ADD COLUMN category TEXT")
+    except aiosqlite.OperationalError:
+        pass # Already exists
+        
     await db.commit()
 
 
@@ -144,12 +152,12 @@ async def sync_db_to_env():
 # --- Conversation helpers ---
 
 
-async def add_message(channel_id: str, role: str, content: str, provider: str | None = None):
+async def add_message(channel_id: str, role: str, content: str, provider: str | None = None, category: str | None = None):
     """Add a message to conversation history."""
     db = await get_db()
     await db.execute(
-        "INSERT INTO conversations (channel_id, role, content, provider) VALUES (?, ?, ?, ?)",
-        (channel_id, role, content, provider),
+        "INSERT INTO conversations (channel_id, role, content, provider, category) VALUES (?, ?, ?, ?, ?)",
+        (channel_id, role, content, provider, category),
     )
     await db.commit()
 
@@ -158,7 +166,7 @@ async def get_messages(channel_id: str, limit: int = 20) -> list[dict]:
     """Get recent messages for a channel."""
     db = await get_db()
     cursor = await db.execute(
-        "SELECT role, content, provider, created_at FROM conversations WHERE channel_id = ? ORDER BY id DESC LIMIT ?",
+        "SELECT role, content, provider, category, created_at FROM conversations WHERE channel_id = ? ORDER BY id DESC LIMIT ?",
         (channel_id, limit),
     )
     rows = await cursor.fetchall()

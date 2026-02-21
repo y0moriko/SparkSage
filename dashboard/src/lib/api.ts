@@ -54,6 +54,7 @@ export interface MessageItem {
   role: string;
   content: string;
   provider: string | null;
+  category: string | null;
   created_at: string;
 }
 

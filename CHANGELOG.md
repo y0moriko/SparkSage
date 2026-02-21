@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.3.2] - 2026-02-21
+
+### Added
+- **Code Review System** — New `/review` slash command that provides structured feedback on code snippets.
+- **`cogs/code_review.py`** — New cog implementing the senior code reviewer persona with specialized prompts.
+- **Conversation Categorization** — Added `category` column to `conversations` table for better tracking of specialized interactions.
+- **Dashboard Badges** — "Code Review" badge added to the conversation viewer for tagged interactions.
+
+### Changed
+- **`db.py`** — Updated `init_db` for automatic schema migration and enhanced `add_message`/`get_messages` with category support.
+- **`utils/bot_utils.py`** — Updated `ask_ai` to support custom system prompts and interaction categories.
+
 ## [0.3.1] - 2026-02-21
 
 ### Changed

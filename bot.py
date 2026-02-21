@@ -18,6 +18,7 @@ class SparkSageBot(commands.Bot):
         initial_extensions = [
             "cogs.general",
             "cogs.summarize",
+            "cogs.code_review",
         ]
         for extension in initial_extensions:
             await self.load_extension(extension)
