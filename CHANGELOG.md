@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.3] - 2026-02-21
+
+### Added
+- **Multi-Language Translation** — New `/translate` slash command that allows users to translate text between any languages supported by the AI.
+- **`cogs/translate.py`** — New cog implementing specialized translation prompts and response formatting.
+- **Translation Dashboard Badge** — Added a "Translation" badge to the conversation viewer for tagged translation interactions.
+
 ## [0.4.2] - 2026-02-21
 
 ### Added
