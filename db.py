@@ -196,14 +196,24 @@ async def sync_env_to_db():
         "TRANSLATION_ENABLED": "true" if getattr(cfg, "TRANSLATION_ENABLED", False) else "false",
         "TRANSLATION_TARGET_LANG": getattr(cfg, "TRANSLATION_TARGET_LANG", "English"),
         "TRANSLATION_CHANNEL_IDS": getattr(cfg, "TRANSLATION_CHANNEL_IDS", ""),
+        "JWT_SECRET": getattr(cfg, "JWT_SECRET", ""),
+        "ADMIN_PASSWORD": getattr(cfg, "ADMIN_PASSWORD", ""),
     }
-    # Only insert keys that don't already exist in DB (don't overwrite user edits)
+    
+    # Critical keys that should always be synced from .env if they exist there
+    CRITICAL_KEYS = {"ADMIN_PASSWORD", "JWT_SECRET", "DISCORD_TOKEN"}
+    
     db = await get_db()
+    existing_config = await get_all_config()
+    
     for key, value in env_keys.items():
-        await db.execute(
-            "INSERT OR IGNORE INTO config (key, value) VALUES (?, ?)",
-            (key, value),
-        )
+        # Update if it's a critical key OR if it doesn't exist in DB yet
+        if key in CRITICAL_KEYS or key not in existing_config:
+            if value: # Only sync non-empty values
+                await db.execute(
+                    "INSERT INTO config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                    (key, value),
+                )
     await db.commit()
 
 

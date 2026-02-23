@@ -22,27 +22,14 @@ async def ask_ai(
     user_id: str | None = None
 ) -> tuple[str, str]:
     """Send a message to AI and return (response, provider_name)."""
-<<<<<<< HEAD
-    # Check for channel-specific prompt and provider
-    channel_prompt = await database.get_channel_prompt(str(channel_id))
-    forced_provider = await database.get_channel_provider(str(channel_id))
-=======
     # Check for channel overrides
     override = await database.get_channel_override(str(channel_id))
->>>>>>> feature/phase-4-channels
     
     # Store user message in DB
     await database.add_message(str(channel_id), "user", f"{user_name}: {message}", category=category)
 
     history = await get_history(channel_id)
     
-<<<<<<< HEAD
-    # Priority: 
-    # 1. Parameter system_prompt (from specialized cogs like code review)
-    # 2. Database channel_prompt
-    # 3. Global config system prompt
-    prompt = system_prompt or channel_prompt or config.SYSTEM_PROMPT
-=======
     # Override logic: 
     # 1. Parameter system_prompt (highest priority - from specialized cogs)
     # 2. Database channel override
@@ -51,7 +38,6 @@ async def ask_ai(
     
     # Provider override logic
     forced_provider = override["provider_name"] if override and override["provider_name"] else None
->>>>>>> feature/phase-4-channels
 
     try:
         if forced_provider:
@@ -62,8 +48,12 @@ async def ask_ai(
                 import time
                 start = time.time()
                 prov_cfg = config.PROVIDERS[forced_provider]
+                model = prov_cfg["model"]
+                if forced_provider == "gemini" and not model.startswith("models/"):
+                    model = f"models/{model}"
+
                 response_obj = client.chat.completions.create(
-                    model=prov_cfg["model"],
+                    model=model,
                     max_tokens=config.MAX_TOKENS,
                     messages=[
                         {"role": "system", "content": prompt},
