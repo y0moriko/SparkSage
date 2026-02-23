@@ -48,10 +48,11 @@ export function ChannelList({ channels, onDelete }: ChannelListProps) {
             <TableCell>
               <Link
                 href={`/dashboard/conversations/${ch.channel_id}`}
-                className="font-mono text-sm text-primary hover:underline"
+                className="font-medium text-primary hover:underline"
               >
-                #{ch.channel_id}
+                {(ch as any).displayName || `#${ch.channel_id}`}
               </Link>
+              <span className="block text-[10px] text-muted-foreground font-mono">{ch.channel_id}</span>
             </TableCell>
             <TableCell className="text-right">{ch.message_count}</TableCell>
             <TableCell className="text-sm text-muted-foreground">

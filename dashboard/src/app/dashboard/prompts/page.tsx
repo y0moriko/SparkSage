@@ -6,7 +6,6 @@ import { Loader2, Plus, MessageSquare, Trash2, Hash, Cpu, RefreshCw } from "luci
 import { api, type ChannelPrompt, type ChannelProvider, type BotStatus, type ProviderItem, type DiscordChannel } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
@@ -19,6 +18,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
@@ -36,80 +36,84 @@ export default function PromptsPage() {
   const [promptOpen, setPromptOpen] = useState(false);
   const [providerOpen, setProviderOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-
-  // Form state
-  const [channelId, setChannelId] = useState("");
-  const [guildId, setGuildId] = useState("");
-  const [systemPrompt, setSystemPrompt] = useState("");
-  const [selectedProvider, setSelectedProvider] = useState("");
+  const [selectedGuildId, setSelectedGuildId] = useState<string>("");
 
   const token = (session as { accessToken?: string })?.accessToken;
 
   useEffect(() => {
     if (token) {
-      fetchData();
+      fetchInitialData();
     }
   }, [token]);
 
-  // Fetch channels when guild changes
   useEffect(() => {
-    if (token && guildId) {
-      fetchChannels(guildId);
+    if (token && selectedGuildId) {
+      fetchGuildData(selectedGuildId);
     }
-  }, [token, guildId]);
+  }, [token, selectedGuildId]);
 
-  async function fetchData() {
+  async function fetchInitialData() {
     try {
-      const [promptsRes, providersRes, availableRes, statusRes] = await Promise.all([
+      const status = await api.getBotStatus(token!);
+      setBotStatus(status);
+      if (status.guilds.length > 0 && !selectedGuildId) {
+        setSelectedGuildId(status.guilds[0].id);
+      }
+      
+      const [promptsRes, providersRes, availableRes] = await Promise.all([
         api.getChannelPrompts(token!),
         api.getChannelProviders(token!),
         api.getProviders(token!),
-        api.getBotStatus(token!),
       ]);
       setPrompts(promptsRes.prompts);
       setChannelProviders(providersRes.providers);
       setAvailableProviders(availableRes.providers);
-      setBotStatus(statusRes);
-      if (statusRes.guilds.length > 0 && !guildId) {
-        setGuildId(statusRes.guilds[0].id);
-      }
     } catch (err) {
-      toast.error("Failed to fetch data");
+      toast.error("Failed to fetch initial data");
     } finally {
       setLoading(false);
     }
   }
 
-  async function fetchChannels(gid: string) {
+  async function fetchGuildData(guildId: string) {
     setChannelsLoading(true);
     try {
-      const res = await api.getGuildChannels(token!, gid);
+      const res = await api.getGuildChannels(token!, guildId);
       setChannels(res.channels);
-      if (res.channels.length > 0) {
-        setChannelId(res.channels[0].id);
-      }
     } catch (err) {
-      toast.error("Failed to load channels for guild");
+      toast.error("Failed to load channels for server");
     } finally {
       setChannelsLoading(false);
     }
   }
 
+  // Form state
+  const [channelId, setChannelId] = useState("");
+  const [systemPrompt, setSystemPrompt] = useState("");
+  const [selectedProvider, setSelectedProvider] = useState("");
+
+  const currentGuildName = botStatus?.guilds.find(g => g.id === selectedGuildId)?.name || selectedGuildId;
+  const getChannelName = (id: string) => channels.find(c => c.id === id)?.name ? `#${channels.find(c => c.id === id)?.name}` : id;
+
+  const filteredPrompts = prompts.filter(p => p.guild_id === selectedGuildId);
+  const filteredChannelProviders = channelProviders.filter(cp => cp.guild_id === selectedGuildId);
+
   async function handleAddPrompt(e: React.FormEvent) {
     e.preventDefault();
-    if (!token || !channelId || !guildId) return;
+    if (!token || !channelId || !selectedGuildId) return;
 
     setSubmitting(true);
     try {
       await api.setChannelPrompt(token, {
         channel_id: channelId,
-        guild_id: guildId,
+        guild_id: selectedGuildId,
         system_prompt: systemPrompt,
       });
       toast.success("Channel persona saved");
       setPromptOpen(false);
       resetForm();
-      fetchData();
+      const res = await api.getChannelPrompts(token!);
+      setPrompts(res.prompts);
     } catch (err) {
       toast.error("Failed to save persona");
     } finally {
@@ -119,19 +123,20 @@ export default function PromptsPage() {
 
   async function handleAddProvider(e: React.FormEvent) {
     e.preventDefault();
-    if (!token || !channelId || !guildId) return;
+    if (!token || !channelId || !selectedGuildId) return;
 
     setSubmitting(true);
     try {
       await api.setChannelProvider(token, {
         channel_id: channelId,
-        guild_id: guildId,
+        guild_id: selectedGuildId,
         provider_name: selectedProvider,
       });
       toast.success("Channel provider override saved");
       setProviderOpen(false);
       resetForm();
-      fetchData();
+      const res = await api.getChannelProviders(token!);
+      setChannelProviders(res.providers);
     } catch (err) {
       toast.error("Failed to save provider override");
     } finally {
@@ -144,7 +149,8 @@ export default function PromptsPage() {
     try {
       await api.deleteChannelPrompt(token, id);
       toast.success("Persona removed");
-      fetchData();
+      const res = await api.getChannelPrompts(token!);
+      setPrompts(res.prompts);
     } catch (err) {
       toast.error("Failed to remove persona");
     }
@@ -155,7 +161,8 @@ export default function PromptsPage() {
     try {
       await api.deleteChannelProvider(token, id);
       toast.success("Provider override removed");
-      fetchData();
+      const res = await api.getChannelProviders(token!);
+      setChannelProviders(res.providers);
     } catch (err) {
       toast.error("Failed to remove override");
     }
@@ -164,10 +171,10 @@ export default function PromptsPage() {
   function resetForm() {
     setSystemPrompt("");
     setSelectedProvider("");
-    // Keep guild and channel if already selected
+    setChannelId("");
   }
 
-  if (loading) {
+  if (loading && !botStatus) {
     return (
       <div className="flex justify-center py-12">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -177,14 +184,28 @@ export default function PromptsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold">Channel Settings</h1>
-          <p className="text-muted-foreground text-sm">Configure per-channel personas and AI provider overrides.</p>
+          <p className="text-muted-foreground text-sm">Configure personas and providers for {currentGuildName}.</p>
         </div>
-        <Button variant="outline" size="sm" onClick={fetchData}>
-          <RefreshCw className="mr-2 h-4 w-4" /> Refresh Data
-        </Button>
+        
+        <div className="flex items-center gap-2">
+          <Label htmlFor="guild-select" className="shrink-0 text-sm font-medium">Server:</Label>
+          <Select value={selectedGuildId} onValueChange={setSelectedGuildId}>
+            <SelectTrigger id="guild-select" className="w-[200px]">
+              <SelectValue placeholder="Select a server" />
+            </SelectTrigger>
+            <SelectContent>
+              {botStatus?.guilds.map(g => (
+                <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button variant="outline" size="icon" onClick={fetchInitialData}>
+            <RefreshCw className="h-4 w-4" />
+          </Button>
+        </div>
       </div>
 
       <Tabs defaultValue="personas" className="space-y-6">
@@ -210,38 +231,22 @@ export default function PromptsPage() {
                   <DialogHeader>
                     <DialogTitle>Add Channel Persona</DialogTitle>
                     <DialogDescription>
-                      Custom system prompt for all interactions in this specific channel.
+                      Persona for <strong>{currentGuildName}</strong>.
                     </DialogDescription>
                   </DialogHeader>
                   <div className="grid gap-4 py-4">
                     <div className="grid gap-2">
-                      <Label htmlFor="guild-p">Select Server</Label>
-                      <select 
-                        id="guild-p" 
-                        value={guildId} 
-                        onChange={e => setGuildId(e.target.value)}
-                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        {botStatus?.guilds.map(g => (
-                          <option key={g.id} value={g.id}>{g.name}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="grid gap-2">
-                      <Label htmlFor="channel-p">Select Channel</Label>
-                      <select 
-                        id="channel-p" 
-                        value={channelId} 
-                        onChange={e => setChannelId(e.target.value)}
-                        disabled={channelsLoading || channels.length === 0}
-                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        {channelsLoading ? <option>Loading...</option> : 
-                         channels.length === 0 ? <option>No channels found</option> :
-                         channels.map(c => (
-                          <option key={c.id} value={c.id}>#{c.name}</option>
-                        ))}
-                      </select>
+                      <Label>Select Channel</Label>
+                      <Select value={channelId} onValueChange={setChannelId}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select a channel" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {channels.map(c => (
+                            <SelectItem key={c.id} value={c.id}>#{c.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
                     <div className="grid gap-2">
                       <Label htmlFor="prompt">System Prompt</Label>
@@ -267,21 +272,24 @@ export default function PromptsPage() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              {prompts.length === 0 ? (
-                <p className="text-sm text-center text-muted-foreground py-8">No channel personas found.</p>
+              {filteredPrompts.length === 0 ? (
+                <p className="text-sm text-center text-muted-foreground py-8">No channel personas found for this server.</p>
               ) : (
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Channel ID</TableHead>
+                      <TableHead>Channel</TableHead>
                       <TableHead>System Prompt</TableHead>
                       <TableHead className="w-[50px]"></TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {prompts.map((p) => (
+                    {filteredPrompts.map((p) => (
                       <TableRow key={p.channel_id}>
-                        <TableCell className="font-mono text-xs">{p.channel_id}</TableCell>
+                        <TableCell className="text-sm font-medium">
+                          {getChannelName(p.channel_id)}
+                          <span className="text-[10px] text-muted-foreground block font-mono">{p.channel_id}</span>
+                        </TableCell>
                         <TableCell><p className="text-xs line-clamp-2">{p.system_prompt}</p></TableCell>
                         <TableCell>
                           <Button variant="ghost" size="icon" onClick={() => handleDeletePrompt(p.channel_id)}>
@@ -310,38 +318,22 @@ export default function PromptsPage() {
                   <DialogHeader>
                     <DialogTitle>Override Provider</DialogTitle>
                     <DialogDescription>
-                      Force a specific AI provider for all interactions in this channel.
+                      Provider override for <strong>{currentGuildName}</strong>.
                     </DialogDescription>
                   </DialogHeader>
                   <div className="grid gap-4 py-4">
                     <div className="grid gap-2">
-                      <Label htmlFor="guild-pr">Select Server</Label>
-                      <select 
-                        id="guild-pr" 
-                        value={guildId} 
-                        onChange={e => setGuildId(e.target.value)}
-                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        {botStatus?.guilds.map(g => (
-                          <option key={g.id} value={g.id}>{g.name}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="grid gap-2">
-                      <Label htmlFor="channel-pr">Select Channel</Label>
-                      <select 
-                        id="channel-pr" 
-                        value={channelId} 
-                        onChange={e => setChannelId(e.target.value)}
-                        disabled={channelsLoading || channels.length === 0}
-                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        {channelsLoading ? <option>Loading...</option> : 
-                         channels.length === 0 ? <option>No channels found</option> :
-                         channels.map(c => (
-                          <option key={c.id} value={c.id}>#{c.name}</option>
-                        ))}
-                      </select>
+                      <Label>Select Channel</Label>
+                      <Select value={channelId} onValueChange={setChannelId}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select a channel" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {channels.map(c => (
+                            <SelectItem key={c.id} value={c.id}>#{c.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
                     <div className="grid gap-2">
                       <Label>Forced AI Provider</Label>
@@ -374,21 +366,24 @@ export default function PromptsPage() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              {channelProviders.length === 0 ? (
-                <p className="text-sm text-center text-muted-foreground py-8">No provider overrides found.</p>
+              {filteredChannelProviders.length === 0 ? (
+                <p className="text-sm text-center text-muted-foreground py-8">No provider overrides found for this server.</p>
               ) : (
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Channel ID</TableHead>
+                      <TableHead>Channel</TableHead>
                       <TableHead>Forced Provider</TableHead>
                       <TableHead className="w-[50px]"></TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {channelProviders.map((cp) => (
+                    {filteredChannelProviders.map((cp) => (
                       <TableRow key={cp.channel_id}>
-                        <TableCell className="font-mono text-xs">{cp.channel_id}</TableCell>
+                        <TableCell className="text-sm font-medium">
+                          {getChannelName(cp.channel_id)}
+                          <span className="text-[10px] text-muted-foreground block font-mono">{cp.channel_id}</span>
+                        </TableCell>
                         <TableCell>
                           <Badge variant="secondary" className="gap-1">
                             <Cpu className="h-3 w-3" /> {cp.provider_name}

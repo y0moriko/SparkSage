@@ -77,6 +77,19 @@ def get_guild_channels(guild_id: str) -> list[dict]:
     ]
 
 
+def get_guild_roles(guild_id: str) -> list[dict]:
+    """Return all roles for a given guild."""
+    guild = bot.get_guild(int(guild_id))
+    if not guild:
+        return []
+    
+    return [
+        {"id": str(r.id), "name": r.name}
+        for r in guild.roles
+        if not r.managed and r.name != "@everyone"
+    ]
+
+
 # --- Events ---
 
 

@@ -73,6 +73,11 @@ export interface DiscordChannel {
   type: string;
 }
 
+export interface DiscordRole {
+  id: string;
+  name: string;
+}
+
 export interface CommandPermission {
   command_name: string;
   guild_id: string;
@@ -113,6 +118,19 @@ export interface ChannelOverride {
   guild_id: string;
   system_prompt: string | null;
   provider_name: string | null;
+}
+
+export interface ServerConfig {
+  guild_id: string;
+  welcome_enabled: boolean;
+  welcome_channel_id: string | null;
+  welcome_message: string | null;
+  digest_enabled: boolean;
+  digest_channel_id: string | null;
+  digest_time: string | null;
+  moderation_enabled: boolean;
+  mod_log_channel_id: string | null;
+  moderation_sensitivity: string | null;
 }
 
 export interface AnalyticsSummary {
@@ -180,6 +198,9 @@ export const api = {
 
   getGuildChannels: (token: string, guildId: string) =>
     apiFetch<{ channels: DiscordChannel[] }>(`/api/bot/guilds/${guildId}/channels`, { token }),
+
+  getGuildRoles: (token: string, guildId: string) =>
+    apiFetch<{ roles: DiscordRole[] }>(`/api/bot/guilds/${guildId}/roles`, { token }),
 
   // Conversations
   getConversations: (token: string) =>
@@ -290,6 +311,17 @@ export const api = {
   deleteChannelOverride: (token: string, channelId: string) =>
     apiFetch<{ status: string }>(`/api/channels/overrides/${channelId}`, {
       method: "DELETE",
+      token,
+    }),
+
+  // Server Settings
+  getServerSettings: (token: string, guildId: string) =>
+    apiFetch<ServerConfig>(`/api/server-settings/${guildId}`, { token }),
+
+  updateServerSettings: (token: string, guildId: string, data: Partial<ServerConfig>) =>
+    apiFetch<{ status: string }>(`/api/server-settings/${guildId}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
       token,
     }),
 

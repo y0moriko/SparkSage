@@ -116,6 +116,19 @@ async def init_db():
             created_at   TEXT DEFAULT (datetime('now'))
         );
 
+        CREATE TABLE IF NOT EXISTS guild_config (
+            guild_id               TEXT PRIMARY KEY,
+            welcome_enabled        INTEGER DEFAULT 0,
+            welcome_channel_id     TEXT,
+            welcome_message        TEXT,
+            digest_enabled         INTEGER DEFAULT 0,
+            digest_channel_id      TEXT,
+            digest_time            TEXT DEFAULT '09:00',
+            moderation_enabled     INTEGER DEFAULT 0,
+            mod_log_channel_id     TEXT,
+            moderation_sensitivity TEXT DEFAULT 'medium'
+        );
+
         INSERT OR IGNORE INTO wizard_state (id) VALUES (1);
         """
     )
@@ -455,6 +468,75 @@ async def list_channel_providers() -> list[dict]:
     """List all custom channel providers."""
     db = await get_db()
     cursor = await db.execute("SELECT * FROM channel_providers")
+    rows = await cursor.fetchall()
+    return [dict(row) for row in rows]
+
+
+# --- Guild Config helpers ---
+
+
+async def get_guild_config(guild_id: str) -> dict | None:
+    """Get the configuration for a specific guild."""
+    db = await get_db()
+    cursor = await db.execute("SELECT * FROM guild_config WHERE guild_id = ?", (guild_id,))
+    row = await cursor.fetchone()
+    if not row:
+        return None
+    
+    data = dict(row)
+    # Convert integer booleans to actual booleans
+    data["welcome_enabled"] = bool(data["welcome_enabled"])
+    data["digest_enabled"] = bool(data["digest_enabled"])
+    data["moderation_enabled"] = bool(data["moderation_enabled"])
+    return data
+
+
+async def set_guild_config(guild_id: str, data: dict):
+    """Update or create guild configuration."""
+    db = await get_db()
+    
+    # Extract values with defaults for updates
+    welcome_enabled = int(data.get("welcome_enabled", False))
+    welcome_channel_id = data.get("welcome_channel_id")
+    welcome_message = data.get("welcome_message")
+    digest_enabled = int(data.get("digest_enabled", False))
+    digest_channel_id = data.get("digest_channel_id")
+    digest_time = data.get("digest_time", "09:00")
+    moderation_enabled = int(data.get("moderation_enabled", False))
+    mod_log_channel_id = data.get("mod_log_channel_id")
+    moderation_sensitivity = data.get("moderation_sensitivity", "medium")
+
+    await db.execute(
+        """
+        INSERT INTO guild_config (
+            guild_id, welcome_enabled, welcome_channel_id, welcome_message,
+            digest_enabled, digest_channel_id, digest_time,
+            moderation_enabled, mod_log_channel_id, moderation_sensitivity
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(guild_id) DO UPDATE SET
+            welcome_enabled = excluded.welcome_enabled,
+            welcome_channel_id = excluded.welcome_channel_id,
+            welcome_message = excluded.welcome_message,
+            digest_enabled = excluded.digest_enabled,
+            digest_channel_id = excluded.digest_channel_id,
+            digest_time = excluded.digest_time,
+            moderation_enabled = excluded.moderation_enabled,
+            mod_log_channel_id = excluded.mod_log_channel_id,
+            moderation_sensitivity = excluded.moderation_sensitivity
+        """,
+        (
+            guild_id, welcome_enabled, welcome_channel_id, welcome_message,
+            digest_enabled, digest_channel_id, digest_time,
+            moderation_enabled, mod_log_channel_id, moderation_sensitivity
+        )
+    )
+    await db.commit()
+
+
+async def list_guild_configs() -> list[dict]:
+    """List all guild configurations."""
+    db = await get_db()
+    cursor = await db.execute("SELECT * FROM guild_config")
     rows = await cursor.fetchall()
     return [dict(row) for row in rows]
 

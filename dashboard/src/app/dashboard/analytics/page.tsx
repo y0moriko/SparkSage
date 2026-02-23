@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
-import { api, AnalyticsSummary, AnalyticsEvent } from "@/lib/api";
+import { api, AnalyticsSummary, AnalyticsEvent, BotStatus } from "@/lib/api";
 import {
   Card,
   CardContent,
@@ -35,6 +35,7 @@ export default function AnalyticsPage() {
   const { data: session } = useSession();
   const [summary, setSummary] = useState<AnalyticsSummary | null>(null);
   const [history, setHistory] = useState<AnalyticsEvent[]>([]);
+  const [channelMap, setChannelMap] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
 
   const token = (session as { accessToken?: string })?.accessToken;
@@ -44,12 +45,28 @@ export default function AnalyticsPage() {
 
     const fetchData = async () => {
       try {
-        const [summaryData, historyData] = await Promise.all([
+        const [summaryData, historyData, status] = await Promise.all([
           api.getAnalyticsSummary(token),
           api.getAnalyticsHistory(token, 10),
+          api.getBotStatus(token),
         ]);
+        
         setSummary(summaryData);
         setHistory(historyData.history);
+
+        // Fetch channel names for each guild to build a master map
+        const allChannelMaps: Record<string, string> = {};
+        await Promise.all(status.guilds.map(async (guild) => {
+          try {
+            const channelsRes = await api.getGuildChannels(token, guild.id);
+            channelsRes.channels.forEach(c => {
+              allChannelMaps[c.id] = `#${c.name}`;
+            });
+          } catch (e) {
+            console.error(`Failed to fetch channels for guild ${guild.id}`);
+          }
+        }));
+        setChannelMap(allChannelMaps);
       } catch (err) {
         toast.error("Failed to load analytics data");
       } finally {
@@ -69,6 +86,12 @@ export default function AnalyticsPage() {
   }
 
   if (!summary) return null;
+
+  // Prepare data for Top Channels bar chart with names
+  const mappedTopChannels = summary.top_channels.map(c => ({
+    ...c,
+    displayName: channelMap[c.channel_id] || c.channel_id
+  }));
 
   return (
     <div className="space-y-6 pb-12">
@@ -191,10 +214,10 @@ export default function AnalyticsPage() {
           </CardHeader>
           <CardContent className="h-[300px]">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={summary.top_channels} layout="vertical">
+              <BarChart data={mappedTopChannels} layout="vertical">
                 <CartesianGrid strokeDasharray="3 3" horizontal={false} />
                 <XAxis type="number" fontSize={12} />
-                <YAxis dataKey="channel_id" type="category" fontSize={10} width={100} />
+                <YAxis dataKey="displayName" type="category" fontSize={10} width={100} />
                 <Tooltip
                   contentStyle={{ backgroundColor: "hsl(var(--card))", borderColor: "hsl(var(--border))" }}
                 />
@@ -261,7 +284,7 @@ export default function AnalyticsPage() {
                     <span className="text-sm font-medium">{event.provider || "N/A"}</span>
                   </div>
                   <div className="text-xs text-muted-foreground">
-                    User: {event.user_id || "System"} • Channel: {event.channel_id || "N/A"}
+                    User: {event.user_id || "System"} • Channel: {event.channel_id ? (channelMap[event.channel_id] || event.channel_id) : "N/A"}
                   </div>
                 </div>
                 <div className="text-right space-y-1">

@@ -23,86 +23,74 @@ class Digest(commands.Cog):
         default_permissions=discord.Permissions(manage_guild=True)
     )
 
-    @digest_group.command(name="run", description="Manually trigger the daily digest summary")
-    @has_command_permission()
-    async def run_manual_digest(self, interaction: discord.Interaction):
-        if not config.DIGEST_CHANNEL_ID:
-            await interaction.response.send_message("Error: Digest channel ID is not configured in settings.", ephemeral=True)
-            return
-
-        await interaction.response.send_message("Starting manual digest generation...", ephemeral=True)
-        await self.run_digest()
-
     @tasks.loop(minutes=1)
     async def daily_digest(self):
         try:
-            if not config.DIGEST_ENABLED or not config.DIGEST_CHANNEL_ID or not config.DIGEST_TIME:
-                return
-
             now = datetime.datetime.now()
             current_time = now.strftime("%H:%M")
             today = now.date()
 
-            if current_time == config.DIGEST_TIME and self.last_run_date != today:
-                self.last_run_date = today
-                await self.run_digest()
+            # Iterate through all guilds the bot is in
+            for guild in self.bot.guilds:
+                # Get server-specific config
+                guild_cfg = await db.get_guild_config(str(guild.id))
+                
+                # Use server settings OR fallback to global (if enabled globally)
+                enabled = guild_cfg["digest_enabled"] if guild_cfg else config.DIGEST_ENABLED
+                target_channel_id = guild_cfg["digest_channel_id"] if guild_cfg else config.DIGEST_CHANNEL_ID
+                digest_time = guild_cfg["digest_time"] if guild_cfg else config.DIGEST_TIME
+
+                if not enabled or not target_channel_id or not digest_time:
+                    continue
+
+                # Use a specific key for last run per guild
+                last_run_key = f"last_run_{guild.id}"
+                last_run = getattr(self, last_run_key, None)
+
+                if current_time == digest_time and last_run != today:
+                    setattr(self, last_run_key, today)
+                    await self.run_server_digest(guild, target_channel_id)
         except Exception as e:
             print(f"Digest Task Error: {e}")
 
-    async def run_digest(self):
-        print(f"Running daily digest at {datetime.datetime.now()}")
+    async def run_server_digest(self, guild: discord.Guild, channel_id: str):
+        print(f"Running daily digest for {guild.name} at {datetime.datetime.now()}")
         
         try:
-            channel_id = int(config.DIGEST_CHANNEL_ID)
-            target_channel = self.bot.get_channel(channel_id)
-        except (ValueError, TypeError):
-            print(f"Digest Error: Invalid channel ID {config.DIGEST_CHANNEL_ID}")
+            target_channel = self.bot.get_channel(int(channel_id))
+            if not target_channel:
+                target_channel = await guild.fetch_channel(int(channel_id))
+        except Exception:
+            print(f"Digest Error: Could not find target channel {channel_id} in {guild.name}")
             return
 
-        if not target_channel:
-            # Try fetching if not in cache
-            try:
-                target_channel = await self.bot.fetch_channel(channel_id)
-            except:
-                print(f"Digest Error: Could not find target channel {channel_id}")
-                return
-
-        # Collect activity from last 24h
+        # Collect activity from last 24h for THIS server
         yesterday = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=1)
         summary_data = []
 
-        # Use the first guild for logging if multiple guilds exist (digest is typically cross-channel but per-bot)
-        primary_guild_id = str(self.bot.guilds[0].id) if self.bot.guilds else None
-
-        for guild in self.bot.guilds:
-            for channel in guild.text_channels:
-                # Basic permission check
-                perms = channel.permissions_for(guild.me)
-                if not perms.read_messages or not perms.read_message_history:
-                    continue
+        for channel in guild.text_channels:
+            # Basic permission check
+            perms = channel.permissions_for(guild.me)
+            if not perms.read_messages or not perms.read_message_history:
+                continue
+            
+            try:
+                messages = []
+                async for msg in channel.history(after=yesterday, limit=50):
+                    if not msg.author.bot and msg.clean_content:
+                        messages.append(f"{msg.author.display_name}: {msg.clean_content}")
                 
-                try:
-                    messages = []
-                    async for msg in channel.history(after=yesterday, limit=50):
-                        if not msg.author.bot and msg.clean_content:
-                            messages.append(f"{msg.author.display_name}: {msg.clean_content}")
-                    
-                    if messages:
-                        summary_data.append(f"--- Channel: #{channel.name} ---")
-                        # Use at most last 15 messages to avoid blowing up context
-                        summary_data.extend(messages[-15:]) 
-                except Exception as e:
-                    print(f"Error fetching history for #{channel.name}: {e}")
+                if messages:
+                    summary_data.append(f"--- Channel: #{channel.name} ---")
+                    summary_data.extend(messages[-15:]) 
+            except Exception as e:
+                print(f"Error fetching history for #{channel.name}: {e}")
 
         if not summary_data:
-            print("Digest: No activity found to summarize.")
-            # If manually triggered, notify the user
-            # (Note: we already responded to the interaction)
             return
 
         # Summarize with AI
         activity_text = "\n".join(summary_data)
-        # Limit total text size
         if len(activity_text) > 15000:
             activity_text = activity_text[:15000] + "\n... (truncated)"
 
@@ -113,22 +101,35 @@ class Digest(commands.Cog):
             response, provider_name = await providers.chat(
                 messages, 
                 prompt,
-                guild_id=primary_guild_id,
-                channel_id=str(config.DIGEST_CHANNEL_ID),
+                guild_id=str(guild.id),
+                channel_id=str(channel_id),
                 user_id="system:digest"
             )
             
-            # Post to digest channel
             embed = discord.Embed(
                 title=f"📅 Daily Digest - {datetime.datetime.now().strftime('%B %d, %Y')}",
-                description=response[:4000], # Discord limit safety
+                description=response[:4000],
                 color=discord.Color.purple()
             )
             embed.set_footer(text=f"Powered by {provider_name}")
             await target_channel.send(embed=embed)
             
         except Exception as e:
-            print(f"Digest Error during AI summary: {e}")
+            print(f"Digest Error during AI summary for {guild.name}: {e}")
+
+    @digest_group.command(name="run", description="Manually trigger the daily digest summary")
+    @has_command_permission()
+    async def run_manual_digest(self, interaction: discord.Interaction):
+        # Get server-specific config
+        guild_cfg = await db.get_guild_config(str(interaction.guild_id))
+        target_channel_id = guild_cfg["digest_channel_id"] if guild_cfg else config.DIGEST_CHANNEL_ID
+
+        if not target_channel_id:
+            await interaction.response.send_message("Error: Digest channel is not configured for this server.", ephemeral=True)
+            return
+
+        await interaction.response.send_message("Starting manual digest generation...", ephemeral=True)
+        await self.run_server_digest(interaction.guild, target_channel_id)
 
     @daily_digest.before_loop
     async def before_daily_digest(self):

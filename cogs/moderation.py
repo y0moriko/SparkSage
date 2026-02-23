@@ -25,29 +25,25 @@ class Moderation(commands.Cog):
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
-        # Use getattr for safety in case config isn't fully reloaded yet
-        enabled = getattr(config, "MODERATION_ENABLED", False)
-        log_channel_id = getattr(config, "MOD_LOG_CHANNEL_ID", "")
+        # Skip bots and DMs
+        if message.author.bot or not message.guild or not message.content:
+            return
+
+        # Get server-specific config
+        guild_cfg = await database.get_guild_config(str(message.guild.id))
+        enabled = guild_cfg["moderation_enabled"] if guild_cfg else getattr(config, "MODERATION_ENABLED", False)
+        log_channel_id = guild_cfg["mod_log_channel_id"] if guild_cfg else getattr(config, "MOD_LOG_CHANNEL_ID", "")
         
         if not enabled or not log_channel_id:
             return
         
-        if message.author.bot or not message.guild or not message.content:
-            return
-
-        # Skip if message is from an administrator (DISABLED FOR TESTING)
-        # if message.author.guild_permissions.administrator:
-        #     return
-
         # Run AI moderation check in background
-        asyncio.create_task(self.check_message(message))
+        asyncio.create_task(self.check_message(message, log_channel_id, guild_cfg))
 
-    async def check_message(self, message: discord.Message):
-        sensitivity = getattr(config, "MODERATION_SENSITIVITY", "medium")
+    async def check_message(self, message: discord.Message, log_channel_id: str, guild_cfg: dict | None):
+        sensitivity = guild_cfg["moderation_sensitivity"] if guild_cfg else getattr(config, "MODERATION_SENSITIVITY", "medium")
         prompt = MODERATION_PROMPT.format(sensitivity=sensitivity)
         messages = [{"role": "user", "content": message.content}]
-        
-        print(f"DEBUG: Checking message: '{message.content}' with sensitivity: {sensitivity}")
         
         try:
             response_text, _ = await providers.chat(
@@ -57,11 +53,9 @@ class Moderation(commands.Cog):
                 channel_id=str(message.channel.id),
                 user_id=str(message.author.id)
             )
-            print(f"DEBUG: AI Response: {response_text}")
             
             # Clean response text
             cleaned_json = response_text.strip()
-            # Find the first { and last }
             start_idx = cleaned_json.find('{')
             end_idx = cleaned_json.rfind('}')
             
@@ -69,20 +63,14 @@ class Moderation(commands.Cog):
                 cleaned_json = cleaned_json[start_idx:end_idx+1]
                 result = json.loads(cleaned_json)
                 
-                print(f"DEBUG: Parsed Result: flagged={result.get('flagged')}, severity={result.get('severity')}")
-                
                 if result.get("flagged"):
-                    await self.log_flagged_message(message, result)
+                    await self.log_flagged_message(message, result, log_channel_id)
                 
         except Exception as e:
             print(f"Moderation Error: {e}")
 
-    async def log_flagged_message(self, message: discord.Message, result: dict):
+    async def log_flagged_message(self, message: discord.Message, result: dict, log_channel_id: str):
         try:
-            log_channel_id = getattr(config, "MOD_LOG_CHANNEL_ID", "")
-            if not log_channel_id:
-                return
-                
             channel_id = int(log_channel_id)
             log_channel = self.bot.get_channel(channel_id)
             
