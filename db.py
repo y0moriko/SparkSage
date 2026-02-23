@@ -14,13 +14,17 @@ _db_connections: dict[asyncio.AbstractEventLoop, aiosqlite.Connection] = {}
 async def get_db() -> aiosqlite.Connection:
     """Return the shared database connection for the current event loop."""
     loop = asyncio.get_running_loop()
-    if loop not in _db_connections or _db_connections[loop].io_task.done():
+    
+    # Check if we have a connection and if it's still open
+    conn = _db_connections.get(loop)
+    if conn is None:
         conn = await aiosqlite.connect(DATABASE_PATH)
         conn.row_factory = aiosqlite.Row
         await conn.execute("PRAGMA journal_mode=WAL")
         await conn.execute("PRAGMA foreign_keys=ON")
         _db_connections[loop] = conn
-    return _db_connections[loop]
+    
+    return conn
 
 
 async def init_db():
