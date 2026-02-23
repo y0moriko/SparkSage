@@ -46,10 +46,10 @@ export function StepProviders() {
 
     setTestingProvider(providerId);
     try {
-      const result = await api.testProvider(token, providerId);
+      const result = await api.testProvider(token, providerId, apiKey);
       setTestResults((prev) => ({
         ...prev,
-        [providerId]: { success: result.success, message: result.message },
+        [providerId]: { success: result.success, message: result.message || (result.success ? "Connection successful" : "Test failed") },
       }));
     } catch (err) {
       setTestResults((prev) => ({

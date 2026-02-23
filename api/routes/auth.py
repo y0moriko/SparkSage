@@ -43,12 +43,19 @@ async def login(body: LoginRequest):
         if db_pw:
             admin_pw = db_pw
 
+    # If STILL no password is set, it's a fresh install. 
+    # Use "admin" as the temporary bootstrap password.
+    is_bootstrap = False
     if not admin_pw:
-        raise HTTPException(status_code=400, detail="No admin password configured. Set ADMIN_PASSWORD in .env")
+        admin_pw = "admin"
+        is_bootstrap = True
 
     # Simple direct comparison for the env-based password
     if body.password != admin_pw:
-        raise HTTPException(status_code=401, detail="Invalid password")
+        detail = "Invalid password"
+        if is_bootstrap:
+            detail = "Invalid password. Use 'admin' for fresh setup."
+        raise HTTPException(status_code=401, detail=detail)
 
     token, expires_at = create_token("admin")
     await db.create_session(token, "admin", expires_at)

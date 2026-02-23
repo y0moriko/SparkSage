@@ -117,10 +117,10 @@ async def test_provider(name: str, api_key: str | None = None) -> dict:
             estimated_cost=cost
         )
         
-        return {"success": True, "latency_ms": latency, "error": None}
+        return {"success": True, "latency_ms": latency, "message": "Connection successful", "error": None}
     except Exception as e:
         latency = int((time.time() - start) * 1000)
-        return {"success": False, "latency_ms": latency, "error": str(e)}
+        return {"success": False, "latency_ms": latency, "message": str(e), "error": str(e)}
 
 
 async def chat(

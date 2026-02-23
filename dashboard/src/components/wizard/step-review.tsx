@@ -37,6 +37,7 @@ export function StepReview() {
         BOT_PREFIX: data.botPrefix,
         MAX_TOKENS: String(data.maxTokens),
         SYSTEM_PROMPT: data.systemPrompt,
+        ADMIN_PASSWORD: data.adminPassword || "admin",
       };
 
       // Add provider keys
@@ -47,6 +48,14 @@ export function StepReview() {
       }
 
       await api.completeWizard(token, config);
+      
+      // Trigger restart to bring the bot online
+      try {
+        await api.restartBot(token);
+      } catch (e) {
+        // Ignore error if connection closes due to restart
+      }
+
       reset();
       router.push("/dashboard");
       router.refresh();

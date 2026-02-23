@@ -16,6 +16,20 @@ function LoginForm() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [isFreshSetup, setIsFreshSetup] = useState(false);
+
+  // Check if it's a fresh setup
+  useState(() => {
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+    fetch(`${apiUrl}/api/wizard/status`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data && !data.completed) {
+          setIsFreshSetup(true);
+        }
+      })
+      .catch(() => {});
+  });
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -52,6 +66,11 @@ function LoginForm() {
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-4">
+          {isFreshSetup && (
+            <div className="rounded-md bg-muted p-2 text-xs text-muted-foreground">
+              <span className="font-semibold">Fresh setup detected!</span> Use <code>admin</code> as the temporary password to start the wizard.
+            </div>
+          )}
           <div className="space-y-2">
             <Label htmlFor="password">Admin Password</Label>
             <Input

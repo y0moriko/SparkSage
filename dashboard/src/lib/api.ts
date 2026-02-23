@@ -200,10 +200,10 @@ export const api = {
   getProviders: (token: string) =>
     apiFetch<ProvidersResponse>("/api/providers", { token }),
 
-  testProvider: (token: string, provider: string) =>
+  testProvider: (token: string, provider: string, api_key?: string) =>
     apiFetch<TestProviderResult>("/api/providers/test", {
       method: "POST",
-      body: JSON.stringify({ provider }),
+      body: JSON.stringify({ provider, api_key }),
       token,
     }),
 
@@ -217,6 +217,12 @@ export const api = {
   // Bot
   getBotStatus: (token: string) =>
     apiFetch<BotStatus>("/api/bot/status", { token }),
+
+  restartBot: (token: string) =>
+    apiFetch<{ status: string }>("/api/bot/restart", {
+      method: "POST",
+      token,
+    }),
 
   getGuildChannels: (token: string, guildId: string) =>
     apiFetch<{ channels: DiscordChannel[] }>(`/api/bot/guilds/${guildId}/channels`, { token }),
