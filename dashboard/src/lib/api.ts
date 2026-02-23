@@ -133,6 +133,17 @@ export interface ServerConfig {
   moderation_sensitivity: string | null;
 }
 
+export interface PluginItem {
+  id: string;
+  name: string;
+  version: string;
+  author: string;
+  description: string;
+  cog: string;
+  enabled: boolean;
+  path: string;
+}
+
 export interface AnalyticsSummary {
   messages_per_day: Array<{ day: string; count: number }>;
   provider_usage: Array<{ provider: string; count: number }>;
@@ -327,6 +338,17 @@ export const api = {
     apiFetch<{ status: string }>(`/api/server-settings/${guildId}`, {
       method: "PUT",
       body: JSON.stringify(data),
+      token,
+    }),
+
+  // Plugins
+  getPlugins: (token: string) =>
+    apiFetch<{ plugins: PluginItem[] }>("/api/plugins", { token }),
+
+  updatePluginStatus: (token: string, pluginId: string, enabled: boolean) =>
+    apiFetch<{ status: string; message: string }>("/api/plugins/status", {
+      method: "PUT",
+      body: JSON.stringify({ id: pluginId, enabled }),
       token,
     }),
 

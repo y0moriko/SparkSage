@@ -16,6 +16,7 @@ import {
   Shield,
   Hash,
   Server,
+  Puzzle,
   UserCircle,
 } from "lucide-react";
 import {
@@ -43,6 +44,7 @@ const BOT_CONFIG_ITEMS = [
   { title: "Channels", href: "/dashboard/prompts", icon: Hash },
   { title: "FAQs", href: "/dashboard/faqs", icon: HelpCircle },
   { title: "Permissions", href: "/dashboard/permissions", icon: Shield },
+  { title: "Plugins", href: "/dashboard/plugins", icon: Puzzle },
 ];
 
 const GLOBAL_CONFIG_ITEMS = [

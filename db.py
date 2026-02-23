@@ -129,6 +129,12 @@ async def init_db():
             moderation_sensitivity TEXT DEFAULT 'medium'
         );
 
+        CREATE TABLE IF NOT EXISTS plugins (
+            name        TEXT PRIMARY KEY,
+            enabled     INTEGER DEFAULT 0,
+            config_data TEXT DEFAULT '{}'
+        );
+
         INSERT OR IGNORE INTO wizard_state (id) VALUES (1);
         """
     )
@@ -541,6 +547,35 @@ async def list_guild_configs() -> list[dict]:
     cursor = await db.execute("SELECT * FROM guild_config")
     rows = await cursor.fetchall()
     return [dict(row) for row in rows]
+
+
+# --- Plugin helpers ---
+
+
+async def set_plugin_status(name: str, enabled: bool):
+    """Enable or disable a plugin."""
+    db = await get_db()
+    await db.execute(
+        "INSERT INTO plugins (name, enabled) VALUES (?, ?) ON CONFLICT(name) DO UPDATE SET enabled = excluded.enabled",
+        (name, int(enabled)),
+    )
+    await db.commit()
+
+
+async def get_enabled_plugins() -> list[str]:
+    """Get list of enabled plugin names."""
+    db = await get_db()
+    cursor = await db.execute("SELECT name FROM plugins WHERE enabled = 1")
+    rows = await cursor.fetchall()
+    return [row["name"] for row in rows]
+
+
+async def list_plugin_states() -> dict[str, bool]:
+    """Get a mapping of plugin names to their enabled status."""
+    db = await get_db()
+    cursor = await db.execute("SELECT name, enabled FROM plugins")
+    rows = await cursor.fetchall()
+    return {row["name"]: bool(row["enabled"]) for row in rows}
 
 
 # --- Wizard helpers ---

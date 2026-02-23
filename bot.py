@@ -6,6 +6,7 @@ import config
 import providers
 import db as database
 from utils.bot_utils import ask_ai
+from plugins.loader import load_enabled_plugins
 
 class SparkSageBot(commands.Bot):
     def __init__(self):
@@ -45,6 +46,9 @@ class SparkSageBot(commands.Bot):
             print(f"Synced {len(synced)} slash command(s)")
         except Exception as e:
             print(f"Failed to sync commands: {e}")
+
+        # Load community plugins
+        await load_enabled_plugins(self)
 
 bot = SparkSageBot()
 

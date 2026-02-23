@@ -1,0 +1,7 @@
+{
+  "name": "Trivia",
+  "version": "1.0.0",
+  "author": "Community",
+  "description": "Fun trivia game commands for your server",
+  "cog": "trivia.py"
+}
