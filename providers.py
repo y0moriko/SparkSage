@@ -4,6 +4,7 @@ import time
 from openai import OpenAI, AsyncOpenAI
 import config
 import db
+import httpx
 
 
 def _create_client(provider_name: str) -> AsyncOpenAI | None:
@@ -40,6 +41,7 @@ def _build_clients() -> dict[str, OpenAI]:
         client = _create_client(name)
         if client:
             clients[name] = client
+
     return clients
 
 
@@ -196,7 +198,25 @@ async def chat(
             return text, provider_name
 
         except Exception as e:
-            errors.append(f"{provider['name']}: {e}")
+            user_friendly_message = "An unknown error occurred."
+            if isinstance(e, httpx.HTTPStatusError):
+                try:
+                    error_json = e.response.json()
+                    if "error" in error_json and "message" in error_json["error"]:
+                        user_friendly_message = error_json["error"]["message"]
+                    elif "message" in error_json: # Some APIs might return message directly
+                        user_friendly_message = error_json["message"]
+                    else:
+                        user_friendly_message = f"API error: {e.response.status_code}"
+                except Exception:
+                    user_friendly_message = f"API error: {e.response.status_code}"
+            else:
+                # For other exceptions, provide a generic message or truncate if too long
+                # I will truncate to 200 characters for now to avoid excessively long messages.
+                full_error_str = str(e)
+                user_friendly_message = full_error_str[:200] + "..." if len(full_error_str) > 200 else full_error_str
+
+            errors.append(f"{provider['name']}: {user_friendly_message}")
             continue
 
     error_details = "\n".join(errors)
