@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
-import { api, AnalyticsSummary, AnalyticsEvent, BotStatus, UsageResponse, CostSummary } from "@/lib/api";
+import { api, AnalyticsSummary, AnalyticsEvent, BotStatus, UsageResponse, CostSummary, ProvidersResponse } from "@/lib/api";
 import {
   Card,
   CardContent,
