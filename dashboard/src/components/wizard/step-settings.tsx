@@ -19,6 +19,21 @@ export function StepSettings() {
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
+        {/* Admin Password */}
+        <div className="space-y-2">
+          <Label htmlFor="admin-password">Admin Password</Label>
+          <Input
+            id="admin-password"
+            type="password"
+            value={data.adminPassword || ""}
+            onChange={(e) => updateData({ adminPassword: e.target.value })}
+            placeholder="Set a new admin password"
+          />
+          <p className="text-xs text-muted-foreground">
+            This will replace the temporary bootstrap password. Don&apos;t forget it!
+          </p>
+        </div>
+
         {/* Prefix */}
         <div className="space-y-2">
           <Label htmlFor="prefix">Command Prefix</Label>

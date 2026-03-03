@@ -32,11 +32,14 @@ async def list_providers(user: dict = Depends(get_current_user)):
 
 class TestProviderRequest(BaseModel):
     provider: str
+    api_key: str | None = None
 
 
 @router.post("/test")
 async def test_provider(body: TestProviderRequest, user: dict = Depends(get_current_user)):
-    result = providers.test_provider(body.provider)
+    # If an API key is provided, we test WITH that key (for the wizard)
+    # Otherwise, we test what's already in the config.
+    result = await providers.test_provider(body.provider, api_key=body.api_key)
     return result
 
 

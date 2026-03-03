@@ -1,68 +1,39 @@
-"""Unified launcher: starts FastAPI in a background thread and the Discord bot in the main thread."""
+"""Manager launcher: wraps the main app in a restart loop."""
 
-import asyncio
-import threading
+import subprocess
+import sys
+import time
 import os
-import uvicorn
 
-
-def start_api_server():
-    """Run the FastAPI server in a background thread."""
-    from api.main import create_app
-
-    app = create_app()
-    port = int(os.getenv("DASHBOARD_PORT", "8000"))
-    uvicorn.run(app, host="0.0.0.0", port=port, log_level="info")
-
-
-async def _init_database():
-    """Initialize the database and seed config from .env."""
-    import db
-    await db.init_db()
-    await db.sync_env_to_db()
-
-
-def main():
-    import config
-    import providers
-
-    # Initialize database synchronously before anything else
-    asyncio.run(_init_database())
-
-    available = providers.get_available_providers()
+def run_manager():
+    # Use the current python interpreter
+    python_exe = sys.executable
+    script_path = os.path.join(os.path.dirname(__file__), "main_launcher.py")
 
     print("=" * 50)
-    print("  SparkSage — Bot + Dashboard Launcher")
+    print("  SparkSage Manager — Auto-Restart Enabled")
     print("=" * 50)
 
-    # Start FastAPI in background thread
-    api_thread = threading.Thread(target=start_api_server, daemon=True)
-    api_thread.start()
-    port = int(os.getenv("DASHBOARD_PORT", "8000"))
-    print(f"  API server starting on http://localhost:{port}")
+    try:
+        while True:
+            print(f"\n[Manager] Starting main application...")
+            # Use subprocess to run the actual bot/API
+            # Passing all arguments to the subprocess
+            process = subprocess.Popen([python_exe, script_path] + sys.argv[1:])
+            
+            # Wait for the process to exit
+            exit_code = process.wait()
+            
+            if exit_code == 0:
+                print(f"\n[Manager] Application exited normally (0). Restarting in 2s...")
+                time.sleep(2)
+            else:
+                print(f"\n[Manager] Application crashed or stopped (exit code: {exit_code}).")
+                print(f"[Manager] Restarting in 5s... (Ctrl+C to stop)")
+                time.sleep(5)
 
-    # Start Discord bot in main thread
-    if not config.DISCORD_TOKEN:
-        print("  WARNING: DISCORD_TOKEN not set — bot will not start.")
-        print("  API server is running. Use the dashboard to configure the bot.")
-        # Keep main thread alive for the API server
-        try:
-            api_thread.join()
-        except KeyboardInterrupt:
-            print("\nShutting down...")
-            return
-
-    if not available:
-        print("  WARNING: No AI providers configured. Add at least one API key.")
-        print("  You can configure providers through the dashboard.")
-
-    print(f"  Primary provider: {config.AI_PROVIDER}")
-    print(f"  Fallback chain: {' -> '.join(available) if available else 'none'}")
-    print("=" * 50)
-
-    from bot import bot
-    bot.run(config.DISCORD_TOKEN)
-
+    except KeyboardInterrupt:
+        print("\n[Manager] Shutting down...")
 
 if __name__ == "__main__":
-    main()
+    run_manager()

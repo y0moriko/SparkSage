@@ -1,13 +1,72 @@
 # Changelog
 
-## [0.3.1] - 2026-02-21
+## [0.5.0] - 2026-02-23
+
+### Added
+- **Analytics & Usage Tracking** — Comprehensive dashboard for visualizing bot activity and AI provider usage.
+- **Analytics Dashboard Page** — New page with interactive charts for messages per day, provider distribution, top channels, and latency.
+- **Analytics API Endpoints** — Backend endpoints `/api/analytics/summary` and `/api/analytics/history` for data retrieval.
+- **`analytics` Database Table** — New table to track events including command usage, mentions, moderation actions, and AI performance metrics.
+- **AI Call Instrumentation** — Automated logging of tokens used and response latency for every AI interaction.
+- **Command Tracking** — Automatic recording of command execution across all bot cogs for usage analysis.
 
 ### Changed
-- **Modular Cog System** — Refactored all Discord commands out of `bot.py` into separate cog files for better organization.
-- **`bot.py`** — Simplified to focus on event handlers and dynamic cog loading via `setup_hook`.
-- **`cogs/general.py`** — Created to handle `/ask`, `/clear`, and `/provider` commands.
-- **`cogs/summarize.py`** — Created to handle the `/summarize` command.
-- **`utils/bot_utils.py`** — Extracted shared bot logic (`ask_ai`, `get_history`) for use across multiple cogs.
+- **`providers.py`** — Refactored `chat()` and `test_provider()` to be asynchronous and support detailed usage logging.
+- **`utils/bot_utils.py`** — Updated `ask_ai()` to propagate guild and user context for accurate analytics reporting.
+
+## [0.4.5] - 2026-02-21
+
+### Added
+- **Per-Channel AI Overrides** — Ability to configure unique system prompts (personas) and force specific AI providers for individual Discord channels.
+- **Advanced Channel Settings UI** — New tabbed interface in the dashboard for managing channel personas and provider overrides.
+- **Channel Override Commands** — New `/prompt set/reset` and `/channel-provider set/reset` Discord commands for real-time configuration.
+- **Expanded Database Schema** — Added `channel_prompts` and `channel_providers` tables for granular bot behavior management.
+- **Channel Browsing API** — Added server and channel dropdowns to the dashboard for easy selection of override targets.
+
+## [0.4.4] - 2026-02-21
+
+### Added
+- **Per-Channel AI Overrides** — Ability to configure unique system prompts (personas) and force specific AI providers for individual Discord channels.
+- **Advanced Channel Settings UI** — New tabbed interface in the dashboard for managing channel personas and provider overrides.
+- **Channel Override Commands** — New `/prompt set/reset` and `/channel-provider set/reset` Discord commands for real-time configuration.
+- **Expanded Database Schema** — Added `channel_prompts` and `channel_providers` tables for granular bot behavior management.
+- **Channel Browsing API** — Added server and channel dropdowns to the dashboard for easy selection of override targets.
+
+## [0.4.3] - 2026-02-21
+
+### Added
+- **Multi-Language Translation & Auto-Detect** — New `/translate` slash command and intelligent automatic language detection.
+- **Channel-Specific Auto-Translation** — Configure specific channels for automatic translation via the dashboard.
+- **`cogs/translate.py`** — New cog with specialized translation personas and channel-restricted auto-translation logic.
+- **Translation Dashboard Settings** — New controls to enable/disable auto-translation, set the target global language, and manage designated channel IDs.
+- **Translation Dashboard Badge** — Added a "Translation" badge to the conversation viewer for better interaction categorization.
+
+## [0.4.2] - 2026-02-21
+
+### Added
+- **AI-Powered Content Moderation** — Real-time message scanning for toxicity, spam, and rule violations.
+- **`cogs/moderation.py`** — New cog that analyzes messages and flags problematic content to a designated mod-log channel.
+- **Moderation Dashboard Settings** — Added controls to enable/disable moderation, select the mod-log channel, and adjust detection sensitivity.
+- **Moderation Logging** — Persistent storage of flagged messages and AI reasoning in the `moderation_events` table.
+
+## [0.4.1] - 2026-02-21
+
+### Added
+- **Daily Digest Scheduler** — Automatically summarizes server activity from the past 24 hours and posts it to a designated channel.
+- **`cogs/digest.py`** — New cog with a task loop for scheduling and AI-powered activity summarization.
+- **Digest Dashboard Settings** — Added controls to the settings page for enabling/disabling the digest, selecting the target channel, and setting the daily post time.
+- **Digest Configuration** — Integrated `DIGEST_ENABLED`, `DIGEST_CHANNEL_ID`, and `DIGEST_TIME` into the database and sync logic.
+
+## [0.4.0] - 2026-02-21
+
+### Added
+- **Modular Cog System** — Refactored all Discord commands into organized cog files (`general`, `summarize`, `code_review`, `faq`, `onboarding`, `permissions`).
+- **Role-Based Access Control (RBAC)** — Comprehensive system to restrict commands to specific server roles, manageable via Discord and Dashboard.
+- **Code Review System** — Specialized `/review` command providing senior-level feedback on code snippets with syntax highlighting.
+- **FAQ Auto-Detection** — Intelligent listener that responds to frequently asked questions based on configurable keywords.
+- **New Member Onboarding** — Customizable welcome flow with rich embeds and server information.
+- **Advanced Dashboard** — New management pages for FAQs and Command Permissions.
+- **Stability Fixes** — Thread-safe loop-local database connections, improved error handling, and Discord intent optimizations.
 
 ## [0.3.0] - 2026-02-19
 
@@ -51,23 +110,6 @@ After (v0.3):
             SQLite DB (config, conversations, sessions, wizard)
 ```
 
-### Files Added
-
-| File | Description |
-|------|-------------|
-| `db.py` | SQLite database layer (aiosqlite) |
-| `run.py` | Unified launcher (bot + FastAPI) |
-| `api/main.py` | FastAPI app factory with CORS |
-| `api/auth.py` | JWT + password auth utilities |
-| `api/deps.py` | Dependency injection |
-| `api/routes/auth.py` | Login + user endpoints |
-| `api/routes/config.py` | Config CRUD endpoints |
-| `api/routes/providers.py` | Provider management + test endpoints |
-| `api/routes/bot.py` | Bot status endpoint |
-| `api/routes/conversations.py` | Conversation CRUD endpoints |
-| `api/routes/wizard.py` | Setup wizard endpoints |
-| `dashboard/` | Full Next.js + shadcn/ui admin dashboard (23 UI components, 4 wizard steps, 4 dashboard pages, auth, sidebar nav) |
-
 ---
 
 ## [0.2.0] - 2026-02-18
@@ -86,34 +128,6 @@ After (v0.3):
 - **`.env.example`** — now includes all 5 providers (3 free + 2 paid) with setup links and rate limit notes
 - **`bot.py`** — refactored `ask_claude()` → `ask_ai()`, removed Anthropic-specific code, integrated `providers.py`
 - **`docs/PRODUCT_DESIGN.md`** — updated architecture diagram, added provider comparison tables, updated roadmap
-
-### Architecture
-
-```
-Before (v0.1):
-  Discord → bot.py → Anthropic SDK → Claude API (paid only)
-
-After (v0.2):
-  Discord → bot.py → providers.py → OpenAI-compatible SDK
-                                       ├── Gemini (free)
-                                       ├── Groq (free)
-                                       ├── OpenRouter (free)
-                                       ├── Anthropic (paid, optional)
-                                       └── OpenAI (paid, optional)
-```
-
-### Files Changed
-
-| File | Action | Description |
-|------|--------|-------------|
-| `providers.py` | **Created** | Multi-provider client with automatic fallback logic |
-| `bot.py` | Modified | Refactored to use `providers.py`, added `/provider` command, response footer |
-| `config.py` | Modified | Multi-provider config, provider definitions, fallback chain |
-| `requirements.txt` | Modified | `anthropic` → `openai` SDK |
-| `.env.example` | Modified | All 5 providers with API key placeholders and docs links |
-| `.env` | **Created** | Dummy keys for local development |
-| `CHANGELOG.md` | **Created** | This file |
-| `docs/PRODUCT_DESIGN.md` | Modified | Updated architecture, provider comparison, roadmap |
 
 ---
 

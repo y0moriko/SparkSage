@@ -4,6 +4,7 @@ import { SessionProvider } from "next-auth/react";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/sidebar/app-sidebar";
 import { Separator } from "@/components/ui/separator";
+import { ModeToggle } from "@/components/ui/mode-toggle";
 
 export default function DashboardLayout({
   children,

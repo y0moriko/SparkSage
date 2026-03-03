@@ -45,6 +45,16 @@ export function MessageList({ messages }: MessageListProps) {
                     {msg.provider}
                   </Badge>
                 )}
+                {msg.category === "code-review" && (
+                  <Badge variant="secondary" className="text-xs px-1.5 py-0 bg-blue-100 text-blue-700 hover:bg-blue-100 border-blue-200">
+                    Code Review
+                  </Badge>
+                )}
+                {msg.category === "translation" && (
+                  <Badge variant="secondary" className="text-xs px-1.5 py-0 bg-green-100 text-green-700 hover:bg-green-100 border-green-200">
+                    Translation
+                  </Badge>
+                )}
               </div>
             </div>
           </div>

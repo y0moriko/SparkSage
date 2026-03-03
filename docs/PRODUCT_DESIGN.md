@@ -376,11 +376,11 @@ First visit redirects to the setup wizard. After setup, the admin dashboard is a
 - [x] Unified launcher (`run.py` — bot + API in one process)
 
 ### Phase 3 — Core Features
-- [ ] Cog-based modular command system
-- [ ] Code review with syntax highlighting
-- [ ] FAQ auto-detection and response
-- [ ] New member onboarding flow
-- [ ] Role-based access control for commands
+- [x] Cog-based modular command system
+- [x] Code review with syntax highlighting
+- [x] FAQ auto-detection and response
+- [x] New member onboarding flow
+- [x] Role-based access control for commands
 
 ### Phase 4 — Advanced Features
 - [ ] Daily digest scheduler

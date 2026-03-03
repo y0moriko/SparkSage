@@ -6,11 +6,18 @@ import { signOut } from "next-auth/react";
 import {
   Zap,
   LayoutDashboard,
+  BarChart3,
   Cpu,
   Settings,
   MessageSquare,
   Wand2,
   LogOut,
+  HelpCircle,
+  Shield,
+  Hash,
+  Server,
+  Puzzle,
+  UserCircle,
 } from "lucide-react";
 import {
   Sidebar,
@@ -25,12 +32,32 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
+// import { ModeToggle } from "@/components/ui/mode-toggle"; // Removed direct import
 
-const NAV_ITEMS = [
+import dynamic from 'next/dynamic';
+
+const DynamicModeToggle = dynamic(
+  () => import('@/components/ui/mode-toggle').then((mod) => mod.ModeToggle),
+  { ssr: false }
+);
+
+const GENERAL_ITEMS = [
   { title: "Overview", href: "/dashboard", icon: LayoutDashboard },
+  { title: "Analytics", href: "/dashboard/analytics", icon: BarChart3 },
+  { title: "Conversations", href: "/dashboard/conversations", icon: MessageSquare },
+];
+
+const BOT_CONFIG_ITEMS = [
+  { title: "Server Settings", href: "/dashboard/server-settings", icon: Server },
+  { title: "Channels", href: "/dashboard/prompts", icon: Hash },
+  { title: "FAQs", href: "/dashboard/faqs", icon: HelpCircle },
+  { title: "Permissions", href: "/dashboard/permissions", icon: Shield },
+  { title: "Plugins", href: "/dashboard/plugins", icon: Puzzle },
+];
+
+const GLOBAL_CONFIG_ITEMS = [
   { title: "Providers", href: "/dashboard/providers", icon: Cpu },
   { title: "Settings", href: "/dashboard/settings", icon: Settings },
-  { title: "Conversations", href: "/dashboard/conversations", icon: MessageSquare },
 ];
 
 export function AppSidebar() {
@@ -39,19 +66,22 @@ export function AppSidebar() {
   return (
     <Sidebar>
       <SidebarHeader>
-        <div className="flex items-center gap-2 px-2 py-1">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-            <Zap className="h-4 w-4" />
+        <div className="flex items-center justify-between px-2 py-1">
+          <div className="flex items-center gap-2">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+              <Zap className="h-4 w-4" />
+            </div>
+            <span className="font-semibold">SparkSage</span>
           </div>
-          <span className="font-semibold">SparkSage</span>
+          <DynamicModeToggle /> {/* Using dynamic import */}
         </div>
       </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>
-          <SidebarGroupLabel>Dashboard</SidebarGroupLabel>
+          <SidebarGroupLabel>General</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {NAV_ITEMS.map((item) => (
+              {GENERAL_ITEMS.map((item) => (
                 <SidebarMenuItem key={item.href}>
                   <SidebarMenuButton asChild isActive={pathname === item.href}>
                     <Link href={item.href}>
@@ -64,6 +94,43 @@ export function AppSidebar() {
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel>Bot Configuration</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {BOT_CONFIG_ITEMS.map((item) => (
+                <SidebarMenuItem key={item.href}>
+                  <SidebarMenuButton asChild isActive={pathname === item.href}>
+                    <Link href={item.href}>
+                      <item.icon className="h-4 w-4" />
+                      <span>{item.title}</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel>System</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {GLOBAL_CONFIG_ITEMS.map((item) => (
+                <SidebarMenuItem key={item.href}>
+                  <SidebarMenuButton asChild isActive={pathname === item.href}>
+                    <Link href={item.href}>
+                      <item.icon className="h-4 w-4" />
+                      <span>{item.title}</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
         <SidebarGroup>
           <SidebarGroupLabel>Tools</SidebarGroupLabel>
           <SidebarGroupContent>

@@ -3,6 +3,7 @@ import { persist } from "zustand/middleware";
 
 export interface WizardData {
   discordToken: string;
+  adminPassword?: string;
   providers: Record<string, string>; // provider_id -> api_key
   primaryProvider: string;
   botPrefix: string;
@@ -20,6 +21,7 @@ interface WizardState {
 
 const defaultData: WizardData = {
   discordToken: "",
+  adminPassword: "",
   providers: {},
   primaryProvider: "gemini",
   botPrefix: "!",

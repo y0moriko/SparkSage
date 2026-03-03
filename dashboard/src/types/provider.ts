@@ -19,9 +19,9 @@ export const PROVIDER_INFO: Record<
 > = {
   gemini: {
     name: "Google Gemini",
-    description: "Free: 10 RPM, 250 req/day (Gemini 2.5 Flash)",
+    description: "Free: 10 RPM, 250 req/day (Gemini 2.5 Flash Lite)",
     getKeyUrl: "https://aistudio.google.com/apikey",
-    defaultModel: "gemini-2.5-flash",
+    defaultModel: "gemini-2.5-flash-lite",
     free: true,
   },
   groq: {

@@ -32,13 +32,13 @@ export default function ConversationDetailPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-3">
-        <Button variant="ghost" size="sm" asChild>
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+        <Button variant="ghost" size="sm" asChild className="w-fit">
           <Link href="/dashboard/conversations">
             <ArrowLeft className="mr-1 h-4 w-4" /> Back
           </Link>
         </Button>
-        <h1 className="text-2xl font-bold">Channel #{channelId}</h1>
+        <h1 className="text-xl sm:text-2xl font-bold truncate">Channel #{channelId}</h1>
       </div>
 
       <Card>

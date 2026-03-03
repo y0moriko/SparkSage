@@ -2,22 +2,29 @@ from __future__ import annotations
 
 import os
 import json
+import asyncio
 import aiosqlite
 
 DATABASE_PATH = os.getenv("DATABASE_PATH", "sparksage.db")
 
-_db: aiosqlite.Connection | None = None
+# Store connections per event loop to avoid thread/loop conflicts
+_db_connections: dict[asyncio.AbstractEventLoop, aiosqlite.Connection] = {}
 
 
 async def get_db() -> aiosqlite.Connection:
-    """Return the shared database connection, creating it if needed."""
-    global _db
-    if _db is None:
-        _db = await aiosqlite.connect(DATABASE_PATH)
-        _db.row_factory = aiosqlite.Row
-        await _db.execute("PRAGMA journal_mode=WAL")
-        await _db.execute("PRAGMA foreign_keys=ON")
-    return _db
+    """Return the shared database connection for the current event loop."""
+    loop = asyncio.get_running_loop()
+    
+    # Check if we have a connection for this loop
+    conn = _db_connections.get(loop)
+    if conn is None:
+        conn = await aiosqlite.connect(DATABASE_PATH)
+        conn.row_factory = aiosqlite.Row
+        await conn.execute("PRAGMA journal_mode=WAL")
+        await conn.execute("PRAGMA foreign_keys=ON")
+        _db_connections[loop] = conn
+    
+    return conn
 
 
 async def init_db():
@@ -36,6 +43,7 @@ async def init_db():
             role       TEXT    NOT NULL,
             content    TEXT    NOT NULL,
             provider   TEXT,
+            category   TEXT,
             created_at TEXT    NOT NULL DEFAULT (datetime('now'))
         );
         CREATE INDEX IF NOT EXISTS idx_conv_channel ON conversations(channel_id);
@@ -54,9 +62,103 @@ async def init_db():
             data         TEXT    NOT NULL DEFAULT '{}'
         );
 
+        CREATE TABLE IF NOT EXISTS faqs (
+            id             INTEGER PRIMARY KEY AUTOINCREMENT,
+            guild_id       TEXT    NOT NULL,
+            question       TEXT    NOT NULL,
+            answer         TEXT    NOT NULL,
+            match_keywords TEXT    NOT NULL,
+            times_used     INTEGER DEFAULT 0,
+            created_by     TEXT,
+            created_at     TEXT    DEFAULT (datetime('now'))
+        );
+
+        CREATE TABLE IF NOT EXISTS command_permissions (
+            command_name TEXT NOT NULL,
+            guild_id     TEXT NOT NULL,
+            role_id      TEXT NOT NULL,
+            PRIMARY KEY (command_name, guild_id, role_id)
+        );
+
+        CREATE TABLE IF NOT EXISTS moderation_events (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            guild_id        TEXT    NOT NULL,
+            channel_id      TEXT    NOT NULL,
+            user_id         TEXT    NOT NULL,
+            user_name       TEXT    NOT NULL,
+            message_content TEXT    NOT NULL,
+            reason          TEXT    NOT NULL,
+            severity        TEXT    NOT NULL,
+            created_at      TEXT    DEFAULT (datetime('now'))
+        );
+
+        CREATE TABLE IF NOT EXISTS channel_prompts (
+            channel_id    TEXT PRIMARY KEY,
+            guild_id      TEXT NOT NULL,
+            system_prompt TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS channel_providers (
+            channel_id    TEXT PRIMARY KEY,
+            guild_id      TEXT NOT NULL,
+            provider_name TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS analytics (
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            event_type   TEXT NOT NULL,
+            guild_id     TEXT,
+            channel_id   TEXT,
+            user_id      TEXT,
+            provider     TEXT,
+            tokens_used  INTEGER,
+            input_tokens INTEGER,
+            output_tokens INTEGER,
+            estimated_cost REAL,
+            latency_ms   INTEGER,
+            created_at   TEXT DEFAULT (datetime('now'))
+        );
+
+        CREATE TABLE IF NOT EXISTS guild_config (
+            guild_id               TEXT PRIMARY KEY,
+            welcome_enabled        INTEGER DEFAULT 0,
+            welcome_channel_id     TEXT,
+            welcome_message        TEXT,
+            digest_enabled         INTEGER DEFAULT 0,
+            digest_channel_id      TEXT,
+            digest_time            TEXT DEFAULT '09:00',
+            moderation_enabled     INTEGER DEFAULT 0,
+            mod_log_channel_id     TEXT,
+            moderation_sensitivity TEXT DEFAULT 'medium'
+        );
+
+        CREATE TABLE IF NOT EXISTS plugins (
+            name        TEXT PRIMARY KEY,
+            enabled     INTEGER DEFAULT 0,
+            config_data TEXT DEFAULT '{}'
+        );
+
         INSERT OR IGNORE INTO wizard_state (id) VALUES (1);
         """
     )
+    
+    # Migration: Add category column if it doesn't exist
+    try:
+        await db.execute("ALTER TABLE conversations ADD COLUMN category TEXT")
+    except aiosqlite.OperationalError:
+        pass # Already exists
+
+    # Migration: Add cost tracking columns to analytics
+    for col in ["input_tokens", "output_tokens"]:
+        try:
+            await db.execute(f"ALTER TABLE analytics ADD COLUMN {col} INTEGER")
+        except aiosqlite.OperationalError:
+            pass
+    try:
+        await db.execute("ALTER TABLE analytics ADD COLUMN estimated_cost REAL")
+    except aiosqlite.OperationalError:
+        pass
+        
     await db.commit()
 
 
@@ -119,14 +221,38 @@ async def sync_env_to_db():
         "BOT_PREFIX": cfg.BOT_PREFIX,
         "MAX_TOKENS": str(cfg.MAX_TOKENS),
         "SYSTEM_PROMPT": cfg.SYSTEM_PROMPT,
+        "RATE_LIMIT_USER": str(cfg.RATE_LIMIT_USER),
+        "RATE_LIMIT_GUILD": str(cfg.RATE_LIMIT_GUILD),
+        "WELCOME_ENABLED": "true" if cfg.WELCOME_ENABLED else "false",
+        "WELCOME_CHANNEL_ID": cfg.WELCOME_CHANNEL_ID,
+        "WELCOME_MESSAGE": cfg.WELCOME_MESSAGE,
+        "DIGEST_ENABLED": "true" if cfg.DIGEST_ENABLED else "false",
+        "DIGEST_CHANNEL_ID": cfg.DIGEST_CHANNEL_ID,
+        "DIGEST_TIME": cfg.DIGEST_TIME,
+        "MODERATION_ENABLED": "true" if getattr(cfg, "MODERATION_ENABLED", False) else "false",
+        "MOD_LOG_CHANNEL_ID": getattr(cfg, "MOD_LOG_CHANNEL_ID", ""),
+        "MODERATION_SENSITIVITY": getattr(cfg, "MODERATION_SENSITIVITY", "medium"),
+        "TRANSLATION_ENABLED": "true" if getattr(cfg, "TRANSLATION_ENABLED", False) else "false",
+        "TRANSLATION_TARGET_LANG": getattr(cfg, "TRANSLATION_TARGET_LANG", "English"),
+        "TRANSLATION_CHANNEL_IDS": getattr(cfg, "TRANSLATION_CHANNEL_IDS", ""),
+        "JWT_SECRET": getattr(cfg, "JWT_SECRET", ""),
+        "ADMIN_PASSWORD": getattr(cfg, "ADMIN_PASSWORD", ""),
     }
-    # Only insert keys that don't already exist in DB (don't overwrite user edits)
+    
+    # Critical keys that should always be synced from .env if they exist there
+    CRITICAL_KEYS = {"ADMIN_PASSWORD", "JWT_SECRET", "DISCORD_TOKEN"}
+    
     db = await get_db()
+    existing_config = await get_all_config()
+    
     for key, value in env_keys.items():
-        await db.execute(
-            "INSERT OR IGNORE INTO config (key, value) VALUES (?, ?)",
-            (key, value),
-        )
+        # Update if it's a critical key OR if it doesn't exist in DB yet
+        if key in CRITICAL_KEYS or key not in existing_config:
+            if value: # Only sync non-empty values
+                await db.execute(
+                    "INSERT INTO config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                    (key, value),
+                )
     await db.commit()
 
 
@@ -144,12 +270,12 @@ async def sync_db_to_env():
 # --- Conversation helpers ---
 
 
-async def add_message(channel_id: str, role: str, content: str, provider: str | None = None):
+async def add_message(channel_id: str, role: str, content: str, provider: str | None = None, category: str | None = None):
     """Add a message to conversation history."""
     db = await get_db()
     await db.execute(
-        "INSERT INTO conversations (channel_id, role, content, provider) VALUES (?, ?, ?, ?)",
-        (channel_id, role, content, provider),
+        "INSERT INTO conversations (channel_id, role, content, provider, category) VALUES (?, ?, ?, ?, ?)",
+        (channel_id, role, content, provider, category),
     )
     await db.commit()
 
@@ -158,7 +284,7 @@ async def get_messages(channel_id: str, limit: int = 20) -> list[dict]:
     """Get recent messages for a channel."""
     db = await get_db()
     cursor = await db.execute(
-        "SELECT role, content, provider, created_at FROM conversations WHERE channel_id = ? ORDER BY id DESC LIMIT ?",
+        "SELECT role, content, provider, category, created_at FROM conversations WHERE channel_id = ? ORDER BY id DESC LIMIT ?",
         (channel_id, limit),
     )
     rows = await cursor.fetchall()
@@ -185,6 +311,285 @@ async def list_channels() -> list[dict]:
     )
     rows = await cursor.fetchall()
     return [dict(row) for row in rows]
+
+
+# --- FAQ helpers ---
+
+
+async def add_faq(guild_id: str, question: str, answer: str, keywords: str, created_by: str | None = None):
+    """Add a new FAQ entry."""
+    db = await get_db()
+    await db.execute(
+        "INSERT INTO faqs (guild_id, question, answer, match_keywords, created_by) VALUES (?, ?, ?, ?, ?)",
+        (guild_id, question, answer, keywords, created_by),
+    )
+    await db.commit()
+
+
+async def get_faqs(guild_id: str | None = None) -> list[dict]:
+    """List all FAQs, optionally filtered by guild."""
+    db = await get_db()
+    if guild_id:
+        cursor = await db.execute("SELECT * FROM faqs WHERE guild_id = ? ORDER BY id DESC", (guild_id,))
+    else:
+        cursor = await db.execute("SELECT * FROM faqs ORDER BY id DESC")
+    rows = await cursor.fetchall()
+    return [dict(row) for row in rows]
+
+
+async def remove_faq(faq_id: int):
+    """Delete a FAQ entry."""
+    db = await get_db()
+    await db.execute("DELETE FROM faqs WHERE id = ?", (faq_id,))
+    await db.commit()
+
+
+async def increment_faq_usage(faq_id: int):
+    """Increment the usage counter for a FAQ."""
+    db = await get_db()
+    await db.execute("UPDATE faqs SET times_used = times_used + 1 WHERE id = ?", (faq_id,))
+    await db.commit()
+
+
+# --- Permission helpers ---
+
+
+async def add_command_permission(command_name: str, guild_id: str, role_id: str):
+    """Restrict a command to a specific role."""
+    db = await get_db()
+    await db.execute(
+        "INSERT OR IGNORE INTO command_permissions (command_name, guild_id, role_id) VALUES (?, ?, ?)",
+        (command_name, guild_id, role_id),
+    )
+    await db.commit()
+
+
+async def remove_command_permission(command_name: str, guild_id: str, role_id: str):
+    """Remove a role restriction from a command."""
+    db = await get_db()
+    await db.execute(
+        "DELETE FROM command_permissions WHERE command_name = ? AND guild_id = ? AND role_id = ?",
+        (command_name, guild_id, role_id),
+    )
+    await db.commit()
+
+
+async def get_command_permissions(command_name: str, guild_id: str) -> list[str]:
+    """Get all allowed role IDs for a specific command."""
+    db = await get_db()
+    cursor = await db.execute(
+        "SELECT role_id FROM command_permissions WHERE command_name = ? AND guild_id = ?",
+        (command_name, guild_id),
+    )
+    rows = await cursor.fetchall()
+    return [row["role_id"] for row in rows]
+
+
+async def get_guild_permissions(guild_id: str) -> list[dict]:
+    """Get all command permissions for a guild."""
+    db = await get_db()
+    cursor = await db.execute(
+        "SELECT * FROM command_permissions WHERE guild_id = ?",
+        (guild_id,),
+    )
+    rows = await cursor.fetchall()
+    return [dict(row) for row in rows]
+
+
+# --- Moderation helpers ---
+
+
+async def add_moderation_event(guild_id: str, channel_id: str, user_id: str, user_name: str, message_content: str, reason: str, severity: str):
+    """Log a moderation event."""
+    db = await get_db()
+    await db.execute(
+        "INSERT INTO moderation_events (guild_id, channel_id, user_id, user_name, message_content, reason, severity) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (guild_id, channel_id, user_id, user_name, message_content, reason, severity),
+    )
+    await db.commit()
+
+
+async def get_moderation_events(guild_id: str | None = None, limit: int = 50) -> list[dict]:
+    """Get recent moderation events."""
+    db = await get_db()
+    if guild_id:
+        cursor = await db.execute("SELECT * FROM moderation_events WHERE guild_id = ? ORDER BY id DESC LIMIT ?", (guild_id, limit))
+    else:
+        cursor = await db.execute("SELECT * FROM moderation_events ORDER BY id DESC LIMIT ?", (limit,))
+    rows = await cursor.fetchall()
+    return [dict(row) for row in rows]
+
+
+# --- Channel Prompt helpers ---
+
+
+async def set_channel_prompt(channel_id: str, guild_id: str, system_prompt: str):
+    """Set a custom system prompt for a channel."""
+    db = await get_db()
+    await db.execute(
+        "INSERT INTO channel_prompts (channel_id, guild_id, system_prompt) VALUES (?, ?, ?) "
+        "ON CONFLICT(channel_id) DO UPDATE SET system_prompt = excluded.system_prompt",
+        (channel_id, guild_id, system_prompt),
+    )
+    await db.commit()
+
+
+async def get_channel_prompt(channel_id: str) -> str | None:
+    """Get the custom system prompt for a channel."""
+    db = await get_db()
+    cursor = await db.execute("SELECT system_prompt FROM channel_prompts WHERE channel_id = ?", (channel_id,))
+    row = await cursor.fetchone()
+    return row["system_prompt"] if row else None
+
+
+async def delete_channel_prompt(channel_id: str):
+    """Delete a custom system prompt for a channel."""
+    db = await get_db()
+    await db.execute("DELETE FROM channel_prompts WHERE channel_id = ?", (channel_id,))
+    await db.commit()
+
+
+async def list_channel_prompts() -> list[dict]:
+    """List all custom channel prompts."""
+    db = await get_db()
+    cursor = await db.execute("SELECT * FROM channel_prompts")
+    rows = await cursor.fetchall()
+    return [dict(row) for row in rows]
+
+
+# --- Channel Provider helpers ---
+
+
+async def set_channel_provider(channel_id: str, guild_id: str, provider_name: str):
+    """Set a custom AI provider for a channel."""
+    db = await get_db()
+    await db.execute(
+        "INSERT INTO channel_providers (channel_id, guild_id, provider_name) VALUES (?, ?, ?) "
+        "ON CONFLICT(channel_id) DO UPDATE SET provider_name = excluded.provider_name",
+        (channel_id, guild_id, provider_name),
+    )
+    await db.commit()
+
+
+async def get_channel_provider(channel_id: str) -> str | None:
+    """Get the custom AI provider for a channel."""
+    db = await get_db()
+    cursor = await db.execute("SELECT provider_name FROM channel_providers WHERE channel_id = ?", (channel_id,))
+    row = await cursor.fetchone()
+    return row["provider_name"] if row else None
+
+
+async def delete_channel_provider(channel_id: str):
+    """Delete a custom AI provider for a channel."""
+    db = await get_db()
+    await db.execute("DELETE FROM channel_providers WHERE channel_id = ?", (channel_id,))
+    await db.commit()
+
+
+async def list_channel_providers() -> list[dict]:
+    """List all custom channel providers."""
+    db = await get_db()
+    cursor = await db.execute("SELECT * FROM channel_providers")
+    rows = await cursor.fetchall()
+    return [dict(row) for row in rows]
+
+
+# --- Guild Config helpers ---
+
+
+async def get_guild_config(guild_id: str) -> dict | None:
+    """Get the configuration for a specific guild."""
+    db = await get_db()
+    cursor = await db.execute("SELECT * FROM guild_config WHERE guild_id = ?", (guild_id,))
+    row = await cursor.fetchone()
+    if not row:
+        return None
+    
+    data = dict(row)
+    # Convert integer booleans to actual booleans
+    data["welcome_enabled"] = bool(data["welcome_enabled"])
+    data["digest_enabled"] = bool(data["digest_enabled"])
+    data["moderation_enabled"] = bool(data["moderation_enabled"])
+    return data
+
+
+async def set_guild_config(guild_id: str, data: dict):
+    """Update or create guild configuration."""
+    db = await get_db()
+    
+    # Extract values with defaults for updates
+    welcome_enabled = int(data.get("welcome_enabled", False))
+    welcome_channel_id = data.get("welcome_channel_id")
+    welcome_message = data.get("welcome_message")
+    digest_enabled = int(data.get("digest_enabled", False))
+    digest_channel_id = data.get("digest_channel_id")
+    digest_time = data.get("digest_time", "09:00")
+    moderation_enabled = int(data.get("moderation_enabled", False))
+    mod_log_channel_id = data.get("mod_log_channel_id")
+    moderation_sensitivity = data.get("moderation_sensitivity", "medium")
+
+    await db.execute(
+        """
+        INSERT INTO guild_config (
+            guild_id, welcome_enabled, welcome_channel_id, welcome_message,
+            digest_enabled, digest_channel_id, digest_time,
+            moderation_enabled, mod_log_channel_id, moderation_sensitivity
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(guild_id) DO UPDATE SET
+            welcome_enabled = excluded.welcome_enabled,
+            welcome_channel_id = excluded.welcome_channel_id,
+            welcome_message = excluded.welcome_message,
+            digest_enabled = excluded.digest_enabled,
+            digest_channel_id = excluded.digest_channel_id,
+            digest_time = excluded.digest_time,
+            moderation_enabled = excluded.moderation_enabled,
+            mod_log_channel_id = excluded.mod_log_channel_id,
+            moderation_sensitivity = excluded.moderation_sensitivity
+        """,
+        (
+            guild_id, welcome_enabled, welcome_channel_id, welcome_message,
+            digest_enabled, digest_channel_id, digest_time,
+            moderation_enabled, mod_log_channel_id, moderation_sensitivity
+        )
+    )
+    await db.commit()
+
+
+async def list_guild_configs() -> list[dict]:
+    """List all guild configurations."""
+    db = await get_db()
+    cursor = await db.execute("SELECT * FROM guild_config")
+    rows = await cursor.fetchall()
+    return [dict(row) for row in rows]
+
+
+# --- Plugin helpers ---
+
+
+async def set_plugin_status(name: str, enabled: bool):
+    """Enable or disable a plugin."""
+    db = await get_db()
+    await db.execute(
+        "INSERT INTO plugins (name, enabled) VALUES (?, ?) ON CONFLICT(name) DO UPDATE SET enabled = excluded.enabled",
+        (name, int(enabled)),
+    )
+    await db.commit()
+
+
+async def get_enabled_plugins() -> list[str]:
+    """Get list of enabled plugin names."""
+    db = await get_db()
+    cursor = await db.execute("SELECT name FROM plugins WHERE enabled = 1")
+    rows = await cursor.fetchall()
+    return [row["name"] for row in rows]
+
+
+async def list_plugin_states() -> dict[str, bool]:
+    """Get a mapping of plugin names to their enabled status."""
+    db = await get_db()
+    cursor = await db.execute("SELECT name, enabled FROM plugins")
+    rows = await cursor.fetchall()
+    return {row["name"]: bool(row["enabled"]) for row in rows}
 
 
 # --- Wizard helpers ---
@@ -248,13 +653,200 @@ async def validate_session(token: str) -> dict | None:
 async def delete_session(token: str):
     """Delete a session."""
     db = await get_db()
-    await db.execute("DELETE FROM sessions WHERE token = ?", (token,))
-    await db.commit()
+    try:
+        await db.execute("DELETE FROM sessions WHERE token = ?", (token,))
+        await db.commit()
+    except Exception:
+        pass
 
 
 async def close_db():
-    """Close the database connection."""
-    global _db
-    if _db:
-        await _db.close()
-        _db = None
+    """Close the database connection for the current loop."""
+    try:
+        loop = asyncio.get_running_loop()
+        if loop in _db_connections:
+            await _db_connections[loop].close()
+            del _db_connections[loop]
+    except RuntimeError:
+        pass
+
+
+# --- Analytics helpers ---
+
+
+async def add_analytics_event(
+    event_type: str,
+    guild_id: str | None = None,
+    channel_id: str | None = None,
+    user_id: str | None = None,
+    provider: str | None = None,
+    tokens_used: int | None = None,
+    input_tokens: int | None = None,
+    output_tokens: int | None = None,
+    estimated_cost: float | None = None,
+    latency_ms: int | None = None,
+):
+    """Log an analytics event."""
+    db = await get_db()
+    await db.execute(
+        """
+        INSERT INTO analytics (
+            event_type, guild_id, channel_id, user_id, provider, 
+            tokens_used, input_tokens, output_tokens, estimated_cost, latency_ms
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            event_type, guild_id, channel_id, user_id, provider, 
+            tokens_used, input_tokens, output_tokens, estimated_cost, latency_ms
+        ),
+    )
+    await db.commit()
+
+
+async def get_analytics_summary(guild_id: str | None = None) -> dict:
+    """Get summarized analytics for the dashboard."""
+    db = await get_db()
+    
+    where_clause = "WHERE event_type IN ('mention', 'command')"
+    params = []
+    if guild_id:
+        where_clause += " AND guild_id = ?"
+        params.append(guild_id)
+
+    # Messages per day
+    cursor = await db.execute(
+        f"""
+        SELECT date(created_at) as day, COUNT(*) as count
+        FROM analytics
+        {where_clause}
+        GROUP BY day
+        ORDER BY day DESC
+        LIMIT 30
+        """,
+        params
+    )
+    messages_per_day = [dict(row) for row in await cursor.fetchall()]
+    
+    # Provider usage
+    where_prov = "WHERE provider IS NOT NULL"
+    params_prov = []
+    if guild_id:
+        where_prov += " AND guild_id = ?"
+        params_prov.append(guild_id)
+
+    cursor = await db.execute(
+        f"""
+        SELECT provider, COUNT(*) as count
+        FROM analytics
+        {where_prov}
+        GROUP BY provider
+        """,
+        params_prov
+    )
+    provider_usage = [dict(row) for row in await cursor.fetchall()]
+    
+    # Top channels
+    where_chan = "WHERE channel_id IS NOT NULL"
+    params_chan = []
+    if guild_id:
+        where_chan += " AND guild_id = ?"
+        params_chan.append(guild_id)
+
+    cursor = await db.execute(
+        f"""
+        SELECT channel_id, COUNT(*) as count
+        FROM analytics
+        {where_chan}
+        GROUP BY channel_id
+        ORDER BY count DESC
+        LIMIT 10
+        """,
+        params_chan
+    )
+    top_channels = [dict(row) for row in await cursor.fetchall()]
+    
+    # Average latency
+    where_lat = "WHERE latency_ms IS NOT NULL"
+    params_lat = []
+    if guild_id:
+        where_lat += " AND guild_id = ?"
+        params_lat.append(guild_id)
+
+    cursor = await db.execute(
+        f"""
+        SELECT date(created_at) as day, AVG(latency_ms) as avg_latency
+        FROM analytics
+        {where_lat}
+        GROUP BY day
+        ORDER BY day DESC
+        LIMIT 30
+        """,
+        params_lat
+    )
+    avg_latency = [dict(row) for row in await cursor.fetchall()]
+    
+    return {
+        "messages_per_day": list(reversed(messages_per_day)),
+        "provider_usage": provider_usage,
+        "top_channels": top_channels,
+        "avg_latency": list(reversed(avg_latency)),
+    }
+
+
+async def get_analytics_history(limit: int = 100, guild_id: str | None = None) -> list[dict]:
+    """Get detailed analytics event history."""
+    db = await get_db()
+    
+    query = "SELECT * FROM analytics"
+    params = []
+    if guild_id:
+        query += " WHERE guild_id = ?"
+        params.append(guild_id)
+    
+    query += " ORDER BY id DESC LIMIT ?"
+    params.append(limit)
+
+    cursor = await db.execute(query, params)
+    rows = await cursor.fetchall()
+    return [dict(row) for row in rows]
+
+
+async def get_cost_summary() -> dict:
+    """Get summarized cost analytics for the dashboard."""
+    db = await get_db()
+    
+    # Total cost
+    cursor = await db.execute("SELECT SUM(estimated_cost) as total FROM analytics")
+    row = await cursor.fetchone()
+    total_cost = row["total"] or 0.0
+    
+    # Cost per provider
+    cursor = await db.execute(
+        """
+        SELECT provider, SUM(estimated_cost) as cost
+        FROM analytics
+        WHERE estimated_cost IS NOT NULL
+        GROUP BY provider
+        """
+    )
+    provider_costs = [dict(row) for row in await cursor.fetchall()]
+    
+    # Cost per day (last 30 days)
+    cursor = await db.execute(
+        """
+        SELECT date(created_at) as day, SUM(estimated_cost) as cost
+        FROM analytics
+        WHERE estimated_cost IS NOT NULL
+        GROUP BY day
+        ORDER BY day DESC
+        LIMIT 30
+        """
+    )
+    daily_costs = [dict(row) for row in await cursor.fetchall()]
+    
+    return {
+        "total_cost": total_cost,
+        "provider_costs": provider_costs,
+        "daily_costs": list(reversed(daily_costs)),
+    }

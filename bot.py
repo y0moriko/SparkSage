@@ -6,21 +6,39 @@ import config
 import providers
 import db as database
 from utils.bot_utils import ask_ai
+from plugins.loader import load_enabled_plugins
 
 class SparkSageBot(commands.Bot):
     def __init__(self):
         intents = discord.Intents.default()
         intents.message_content = True
+        intents.members = True
         super().__init__(command_prefix=config.BOT_PREFIX, intents=intents)
 
     async def setup_hook(self):
+        # Initialize database first
+        await database.init_db()
+        await database.sync_env_to_db()
+
         # Load cogs
         initial_extensions = [
             "cogs.general",
             "cogs.summarize",
+            "cogs.code_review",
+            "cogs.faq",
+            "cogs.onboarding",
+            "cogs.permissions",
+            "cogs.digest",
+            "cogs.moderation",
+            "cogs.translate",
+            "cogs.prompts",
         ]
         for extension in initial_extensions:
-            await self.load_extension(extension)
+            try:
+                await self.load_extension(extension)
+                print(f"Loaded extension: {extension}")
+            except Exception as e:
+                print(f"Failed to load extension {extension}: {e}")
         
         # Sync slash commands
         try:
@@ -28,6 +46,9 @@ class SparkSageBot(commands.Bot):
             print(f"Synced {len(synced)} slash command(s)")
         except Exception as e:
             print(f"Failed to sync commands: {e}")
+
+        # Load community plugins
+        await load_enabled_plugins(self)
 
 bot = SparkSageBot()
 
@@ -41,8 +62,36 @@ def get_bot_status() -> dict:
             "latency_ms": round(bot.latency * 1000, 1),
             "guild_count": len(bot.guilds),
             "guilds": [{"id": str(g.id), "name": g.name, "member_count": g.member_count} for g in bot.guilds],
+            "commands": [cmd.name for cmd in bot.tree.get_commands()],
         }
     return {"online": False, "username": None, "latency_ms": None, "guild_count": 0, "guilds": []}
+
+
+def get_guild_channels(guild_id: str) -> list[dict]:
+    """Return all text channels for a given guild."""
+    guild = bot.get_guild(int(guild_id))
+    if not guild:
+        return []
+    
+    # Return basic info for text channels the bot can see
+    return [
+        {"id": str(c.id), "name": c.name, "type": str(c.type)}
+        for c in guild.text_channels
+        if c.permissions_for(guild.me).view_channel
+    ]
+
+
+def get_guild_roles(guild_id: str) -> list[dict]:
+    """Return all roles for a given guild."""
+    guild = bot.get_guild(int(guild_id))
+    if not guild:
+        return []
+    
+    return [
+        {"id": str(r.id), "name": r.name}
+        for r in guild.roles
+        if not r.managed and r.name != "@everyone"
+    ]
 
 
 # --- Events ---
@@ -50,10 +99,6 @@ def get_bot_status() -> dict:
 
 @bot.event
 async def on_ready():
-    # Initialize database when bot is ready
-    await database.init_db()
-    await database.sync_env_to_db()
-
     available = providers.get_available_providers()
     primary = config.AI_PROVIDER
     provider_info = config.PROVIDERS.get(primary, {})
@@ -76,7 +121,11 @@ async def on_message(message: discord.Message):
 
         async with message.channel.typing():
             response, provider_name = await ask_ai(
-                message.channel.id, message.author.display_name, clean_content
+                message.channel.id, 
+                message.author.display_name, 
+                clean_content,
+                guild_id=str(message.guild.id) if message.guild else None,
+                user_id=str(message.author.id)
             )
 
         # Split long responses (Discord 2000 char limit)
