@@ -16,6 +16,7 @@ class GuildConfigUpdate(BaseModel):
     moderation_enabled: bool | None = None
     mod_log_channel_id: str | None = None
     moderation_sensitivity: str | None = None
+    faq_channel_id: str | None = None
 
 @router.get("/{guild_id}")
 async def get_server_settings(guild_id: str, user: dict = Depends(get_current_user)):
@@ -32,7 +33,8 @@ async def get_server_settings(guild_id: str, user: dict = Depends(get_current_us
             "digest_time": "09:00",
             "moderation_enabled": False,
             "mod_log_channel_id": "",
-            "moderation_sensitivity": "medium"
+            "moderation_sensitivity": "medium",
+            "faq_channel_id": ""
         }
     return config
 

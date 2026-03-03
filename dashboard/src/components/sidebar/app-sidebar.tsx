@@ -18,6 +18,8 @@ import {
   Server,
   Puzzle,
   UserCircle,
+  BookOpen,
+  Terminal,
 } from "lucide-react";
 import {
   Sidebar,
@@ -50,6 +52,8 @@ const GENERAL_ITEMS = [
 const BOT_CONFIG_ITEMS = [
   { title: "Server Settings", href: "/dashboard/server-settings", icon: Server },
   { title: "Channels", href: "/dashboard/prompts", icon: Hash },
+  { title: "Knowledge", href: "/dashboard/knowledge", icon: BookOpen },
+  { title: "Custom Commands", href: "/dashboard/custom-commands", icon: Terminal },
   { title: "FAQs", href: "/dashboard/faqs", icon: HelpCircle },
   { title: "Permissions", href: "/dashboard/permissions", icon: Shield },
   { title: "Plugins", href: "/dashboard/plugins", icon: Puzzle },

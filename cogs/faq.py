@@ -13,6 +13,12 @@ class FAQ(commands.Cog):
         if message.author.bot or not message.guild:
             return
 
+        # Check for guild-specific FAQ channel restriction
+        guild_config = await database.get_guild_config(str(message.guild.id))
+        if guild_config and guild_config.get("faq_channel_id"):
+            if str(message.channel.id) != guild_config["faq_channel_id"]:
+                return
+
         # Check for keywords in the message
         content = message.content.lower()
         faqs = await database.get_faqs(str(message.guild.id))

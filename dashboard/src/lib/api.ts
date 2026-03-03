@@ -5,12 +5,16 @@ interface FetchOptions extends RequestInit {
 }
 
 async function apiFetch<T>(path: string, options: FetchOptions = {}): Promise<T> {
-  const { token, headers: customHeaders, ...rest } = options;
+  const { token, headers: customHeaders, body, ...rest } = options;
 
   const headers: Record<string, string> = {
-    "Content-Type": "application/json",
     ...((customHeaders as Record<string, string>) || {}),
   };
+
+  // If body is NOT FormData, default to JSON
+  if (body && !(body instanceof FormData) && !headers["Content-Type"]) {
+    headers["Content-Type"] = "application/json";
+  }
 
   if (token) {
     headers["Authorization"] = `Bearer ${token}`;
@@ -18,6 +22,7 @@ async function apiFetch<T>(path: string, options: FetchOptions = {}): Promise<T>
 
   const res = await fetch(`${API_URL}${path}`, {
     headers,
+    body,
     ...rest,
   });
 
@@ -131,6 +136,7 @@ export interface ServerConfig {
   moderation_enabled: boolean;
   mod_log_channel_id: string | null;
   moderation_sensitivity: string | null;
+  faq_channel_id: string | null;
 }
 
 export interface PluginItem {
@@ -171,6 +177,20 @@ export interface AnalyticsEvent {
   provider: string | null;
   tokens_used: number | null;
   latency_ms: number | null;
+  created_at: string;
+}
+
+export interface KnowledgeFile {
+  name: string;
+  size: number;
+  type: string;
+}
+
+export interface CustomCommand {
+  name: string;
+  description: string;
+  prompt: string;
+  requires_input: boolean;
   created_at: string;
 }
 
@@ -376,4 +396,41 @@ export const api = {
 
   getAnalyticsHistory: (token: string, limit: number = 100, guildId?: string) =>
     apiFetch<{ history: AnalyticsEvent[] }>(`/api/analytics/history?limit=${limit}${guildId ? `&guild_id=${guildId}` : ""}`, { token }),
+
+  // Knowledge Base
+  getKnowledgeFiles: (token: string) =>
+    apiFetch<{ files: KnowledgeFile[] }>("/api/knowledge/", { token }),
+
+  uploadKnowledgeFile: (token: string, file: File) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    return apiFetch<{ status: string; filename: string }>("/api/knowledge/upload", {
+      method: "POST",
+      body: formData,
+      token,
+    });
+  },
+
+  deleteKnowledgeFile: (token: string, filename: string) =>
+    apiFetch<{ status: string }>(`/api/knowledge/${filename}`, {
+      method: "DELETE",
+      token,
+    }),
+
+  // Custom Commands
+  getCustomCommands: (token: string) =>
+    apiFetch<{ commands: CustomCommand[] }>("/api/prompts/custom", { token }),
+
+  addCustomCommand: (token: string, data: Omit<CustomCommand, "created_at">) =>
+    apiFetch<{ status: string; name: string }>("/api/prompts/custom", {
+      method: "POST",
+      body: JSON.stringify(data),
+      token,
+    }),
+
+  deleteCustomCommand: (token: string, name: string) =>
+    apiFetch<{ status: string }>(`/api/prompts/custom/${name}`, {
+      method: "DELETE",
+      token,
+    }),
 };

@@ -45,3 +45,28 @@ async def set_channel_provider(body: ChannelProviderUpdate, user: dict = Depends
 async def delete_channel_provider(channel_id: str, user: dict = Depends(get_current_user)):
     await db.delete_channel_provider(channel_id)
     return {"status": "ok"}
+
+# --- Custom Commands ---
+
+class CustomCommandCreate(BaseModel):
+    name: str
+    description: str
+    prompt: str
+    requires_input: bool = True
+
+@router.get("/custom")
+async def list_custom_commands(user: dict = Depends(get_current_user)):
+    commands = await db.get_custom_commands()
+    return {"commands": commands}
+
+@router.post("/custom")
+async def add_custom_command(body: CustomCommandCreate, user: dict = Depends(get_current_user)):
+    # Clean name (no spaces, lowercase)
+    name = body.name.lower().replace(" ", "_")
+    await db.add_custom_command(name, body.description, body.prompt, body.requires_input)
+    return {"status": "ok", "name": name}
+
+@router.delete("/custom/{name}")
+async def delete_custom_command(name: str, user: dict = Depends(get_current_user)):
+    await db.delete_custom_command(name)
+    return {"status": "ok"}

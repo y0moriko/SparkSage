@@ -129,13 +129,22 @@ async def init_db():
             digest_time            TEXT DEFAULT '09:00',
             moderation_enabled     INTEGER DEFAULT 0,
             mod_log_channel_id     TEXT,
-            moderation_sensitivity TEXT DEFAULT 'medium'
+            moderation_sensitivity TEXT DEFAULT 'medium',
+            faq_channel_id         TEXT
         );
 
         CREATE TABLE IF NOT EXISTS plugins (
             name        TEXT PRIMARY KEY,
             enabled     INTEGER DEFAULT 0,
             config_data TEXT DEFAULT '{}'
+        );
+
+        CREATE TABLE IF NOT EXISTS custom_commands (
+            name            TEXT PRIMARY KEY,
+            description     TEXT NOT NULL,
+            prompt          TEXT NOT NULL,
+            requires_input  INTEGER DEFAULT 1,
+            created_at      TEXT DEFAULT (datetime('now'))
         );
 
         INSERT OR IGNORE INTO wizard_state (id) VALUES (1);
@@ -527,14 +536,16 @@ async def set_guild_config(guild_id: str, data: dict):
     moderation_enabled = int(data.get("moderation_enabled", False))
     mod_log_channel_id = data.get("mod_log_channel_id")
     moderation_sensitivity = data.get("moderation_sensitivity", "medium")
+    faq_channel_id = data.get("faq_channel_id")
 
     await db.execute(
         """
         INSERT INTO guild_config (
             guild_id, welcome_enabled, welcome_channel_id, welcome_message,
             digest_enabled, digest_channel_id, digest_time,
-            moderation_enabled, mod_log_channel_id, moderation_sensitivity
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            moderation_enabled, mod_log_channel_id, moderation_sensitivity,
+            faq_channel_id
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(guild_id) DO UPDATE SET
             welcome_enabled = excluded.welcome_enabled,
             welcome_channel_id = excluded.welcome_channel_id,
@@ -544,12 +555,14 @@ async def set_guild_config(guild_id: str, data: dict):
             digest_time = excluded.digest_time,
             moderation_enabled = excluded.moderation_enabled,
             mod_log_channel_id = excluded.mod_log_channel_id,
-            moderation_sensitivity = excluded.moderation_sensitivity
+            moderation_sensitivity = excluded.moderation_sensitivity,
+            faq_channel_id = excluded.faq_channel_id
         """,
         (
             guild_id, welcome_enabled, welcome_channel_id, welcome_message,
             digest_enabled, digest_channel_id, digest_time,
-            moderation_enabled, mod_log_channel_id, moderation_sensitivity
+            moderation_enabled, mod_log_channel_id, moderation_sensitivity,
+            faq_channel_id
         )
     )
     await db.commit()
@@ -850,3 +863,32 @@ async def get_cost_summary() -> dict:
         "provider_costs": provider_costs,
         "daily_costs": list(reversed(daily_costs)),
     }
+
+
+# --- Custom Command helpers ---
+
+
+async def get_custom_commands() -> list[dict]:
+    """List all custom AI commands."""
+    db = await get_db()
+    cursor = await db.execute("SELECT * FROM custom_commands ORDER BY name ASC")
+    rows = await cursor.fetchall()
+    return [dict(row) for row in rows]
+
+
+async def add_custom_command(name: str, description: str, prompt: str, requires_input: bool = True):
+    """Add or update a custom AI command."""
+    db = await get_db()
+    await db.execute(
+        "INSERT INTO custom_commands (name, description, prompt, requires_input) VALUES (?, ?, ?, ?) "
+        "ON CONFLICT(name) DO UPDATE SET description = excluded.description, prompt = excluded.prompt, requires_input = excluded.requires_input",
+        (name, description, prompt, int(requires_input)),
+    )
+    await db.commit()
+
+
+async def delete_custom_command(name: str):
+    """Delete a custom AI command."""
+    db = await get_db()
+    await db.execute("DELETE FROM custom_commands WHERE name = ?", (name,))
+    await db.commit()

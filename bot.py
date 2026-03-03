@@ -32,6 +32,7 @@ class SparkSageBot(commands.Bot):
             "cogs.moderation",
             "cogs.translate",
             "cogs.prompts",
+            "cogs.custom_commands",
         ]
         for extension in initial_extensions:
             try:
@@ -108,6 +109,21 @@ async def on_ready():
     print(f"Fallback chain: {' -> '.join(available)}")
 
 
+def _format_provider_name(provider_name: str) -> str:
+    """Formats provider names for display in the footer."""
+    if provider_name == "gemini":
+        return "Google Gemini"
+    elif provider_name == "groq":
+        return "Groq"
+    elif provider_name == "openrouter":
+        return "OpenRouter"
+    elif provider_name == "anthropic":
+        return "Anthropic Claude"
+    elif provider_name == "openai":
+        return "OpenAI"
+    return provider_name.capitalize() # Default capitalization
+
+
 @bot.event
 async def on_message(message: discord.Message):
     if message.author == bot.user:
@@ -119,18 +135,49 @@ async def on_message(message: discord.Message):
         if not clean_content:
             clean_content = "Hello!"
 
+        # Handle image attachments for vision
+        image_url = None
+        if message.attachments:
+            for attachment in message.attachments:
+                if any(attachment.filename.lower().endswith(ext) for ext in [".png", ".jpg", ".jpeg", ".webp", ".gif"]):
+                    image_url = attachment.url
+                    break
+
         async with message.channel.typing():
             response, provider_name = await ask_ai(
                 message.channel.id, 
                 message.author.display_name, 
                 clean_content,
                 guild_id=str(message.guild.id) if message.guild else None,
-                user_id=str(message.author.id)
+                user_id=str(message.author.id),
+                image_url=image_url
             )
 
-        # Split long responses (Discord 2000 char limit)
-        for i in range(0, len(response), 2000):
-            await message.reply(response[i : i + 2000])
+        # Add provider footer if a valid provider was used
+        if provider_name and provider_name != "none":
+            formatted_provider_name = _format_provider_name(provider_name)
+            footer = f"\n\n_Powered by {formatted_provider_name}_"
+            
+            response_chunks = []
+            current_chunk = ""
+
+            # Build chunks, ensuring footer fits the last one or is sent separately
+            # This handles responses potentially exceeding 2000 chars.
+            full_response_with_footer = response + footer
+
+            for i in range(0, len(full_response_with_footer), 2000):
+                response_chunks.append(full_response_with_footer[i : i + 2000])
+
+            # Send all response chunks
+            for chunk in response_chunks:
+                await message.reply(chunk)
+            
+        else:
+            # If no valid provider, just send the response (without footer)
+            response_chunks = [response[i:i+2000] for i in range(0, len(response), 2000)]
+            for chunk in response_chunks:
+                await message.reply(chunk)
+
 
     await bot.process_commands(message)
 

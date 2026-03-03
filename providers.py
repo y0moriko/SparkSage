@@ -4,6 +4,7 @@ import time
 from openai import OpenAI, AsyncOpenAI
 import config
 import db
+import httpx
 
 
 def _create_client(provider_name: str) -> AsyncOpenAI | None:
@@ -40,6 +41,7 @@ def _build_clients() -> dict[str, OpenAI]:
         client = _create_client(name)
         if client:
             clients[name] = client
+
     return clients
 
 
@@ -128,7 +130,8 @@ async def chat(
     system_prompt: str,
     guild_id: str | None = None,
     channel_id: str | None = None,
-    user_id: str | None = None
+    user_id: str | None = None,
+    image_url: str | None = None
 ) -> tuple[str, str]:
     """Send messages to AI and return (response_text, provider_name).
 
@@ -145,15 +148,29 @@ async def chat(
         provider = config.PROVIDERS[provider_name]
         model = provider["model"]
 
+        # Build message payload
+        payload = [
+            {"role": "system", "content": system_prompt},
+            *messages,
+        ]
+
+        # If image is provided, add it to the LAST message (current user input)
+        # Note: We assume the last message in 'messages' is the most recent user input
+        if image_url and messages:
+            last_msg = messages[-1]
+            if last_msg["role"] == "user":
+                last_msg_content = last_msg["content"]
+                last_msg["content"] = [
+                    {"type": "text", "text": last_msg_content},
+                    {"type": "image_url", "image_url": {"url": image_url}}
+                ]
+
         start = time.time()
         try:
             response = await client.chat.completions.create(
                 model=model,
                 max_tokens=config.MAX_TOKENS,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    *messages,
-                ],
+                messages=payload,
             )
             text = response.choices[0].message.content
             latency = int((time.time() - start) * 1000)
@@ -181,7 +198,25 @@ async def chat(
             return text, provider_name
 
         except Exception as e:
-            errors.append(f"{provider['name']}: {e}")
+            user_friendly_message = "An unknown error occurred."
+            if isinstance(e, httpx.HTTPStatusError):
+                try:
+                    error_json = e.response.json()
+                    if "error" in error_json and "message" in error_json["error"]:
+                        user_friendly_message = error_json["error"]["message"]
+                    elif "message" in error_json: # Some APIs might return message directly
+                        user_friendly_message = error_json["message"]
+                    else:
+                        user_friendly_message = f"API error: {e.response.status_code}"
+                except Exception:
+                    user_friendly_message = f"API error: {e.response.status_code}"
+            else:
+                # For other exceptions, provide a generic message or truncate if too long
+                # I will truncate to 200 characters for now to avoid excessively long messages.
+                full_error_str = str(e)
+                user_friendly_message = full_error_str[:200] + "..." if len(full_error_str) > 200 else full_error_str
+
+            errors.append(f"{provider['name']}: {user_friendly_message}")
             continue
 
     error_details = "\n".join(errors)
