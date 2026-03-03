@@ -177,6 +177,7 @@ export interface AnalyticsEvent {
   provider: string | null;
   tokens_used: number | null;
   latency_ms: number | null;
+  estimated_cost: number | null; // Added this line
   created_at: string;
 }
 
