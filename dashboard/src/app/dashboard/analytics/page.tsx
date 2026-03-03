@@ -448,7 +448,7 @@ export default function AnalyticsPage() {
                       cx="50%"
                       cy="50%"
                       outerRadius={80}
-                      label={({ provider, cost }) => `${provider}: $${cost.toFixed(3)}`}
+                      label={({ payload }) => `${payload.provider}: $${payload.cost.toFixed(3)}`}
                     >
                       {costs?.provider_costs.map((entry, index) => (
                         <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
