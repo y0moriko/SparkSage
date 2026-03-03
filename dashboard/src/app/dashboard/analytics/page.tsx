@@ -478,7 +478,7 @@ export default function AnalyticsPage() {
                     <YAxis fontSize={12} tickFormatter={(val) => `$${val.toFixed(2)}`} />
                     <Tooltip 
                       labelFormatter={(val) => format(new Date(val), "PPPP")}
-                      formatter={(val: number) => [`$${val.toFixed(4)}`, "Cost"]}
+                      formatter={(val: number | undefined) => [`$${(val ?? 0).toFixed(4)}`, "Cost"]}
                     />
                     <Bar dataKey="cost" fill="#10b981" radius={[4, 4, 0, 0]} />
                   </BarChart>
