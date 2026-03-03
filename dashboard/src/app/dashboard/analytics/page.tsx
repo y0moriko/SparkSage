@@ -454,7 +454,7 @@ export default function AnalyticsPage() {
                         <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                       ))}
                     </Pie>
-                    <Tooltip formatter={(val: number) => `$${val.toFixed(4)}`} />
+                    <Tooltip formatter={(val: number | undefined) => `$${(val ?? 0).toFixed(4)}`} />
                     <Legend />
                   </PieChart>
                 </ResponsiveContainer>
