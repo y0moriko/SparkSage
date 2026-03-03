@@ -272,7 +272,7 @@ export default function AnalyticsPage() {
                       cx="50%"
                       cy="50%"
                       outerRadius={80}
-                      label={({ provider }) => provider}
+                      label={({ payload }) => payload.provider}
                     >
                       {summary.provider_usage.map((entry, index) => (
                         <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
