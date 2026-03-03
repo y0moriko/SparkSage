@@ -475,7 +475,7 @@ export default function AnalyticsPage() {
                       tickFormatter={(val) => format(new Date(val), "MMM d")}
                       fontSize={12} 
                     />
-                    <YAxis fontSize={12} tickFormatter={(val) => `$${val.toFixed(2)}`} />
+                    <YAxis fontSize={12} tickFormatter={(val: number | undefined) => `$${(val ?? 0).toFixed(2)}`} />
                     <Tooltip 
                       labelFormatter={(val) => format(new Date(val), "PPPP")}
                       formatter={(val: number | undefined) => [`$${(val ?? 0).toFixed(4)}`, "Cost"]}
