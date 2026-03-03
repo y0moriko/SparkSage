@@ -13,6 +13,27 @@ async def get_history(channel_id: int) -> list[dict]:
     return [{"role": m["role"], "content": m["content"]} for m in messages]
 
 
+def get_knowledge_context() -> str:
+    """Read all files in the knowledge directory and return combined content."""
+    import os
+    knowledge_dir = "sparksage/knowledge"
+    if not os.path.exists(knowledge_dir):
+        return ""
+    
+    context_parts = []
+    for filename in os.listdir(knowledge_dir):
+        if filename.endswith((".txt", ".md")):
+            try:
+                with open(os.path.join(knowledge_dir, filename), "r", encoding="utf-8") as f:
+                    context_parts.append(f"--- KNOWLEDGE SOURCE: {filename} ---\n{f.read()}\n")
+            except Exception:
+                continue
+    
+    if context_parts:
+        return "\nUSE THE FOLLOWING KNOWLEDGE TO ANSWER QUESTIONS IF RELEVANT:\n" + "\n".join(context_parts)
+    return ""
+
+
 async def ask_ai(
     channel_id: int, 
     user_name: str, 
@@ -20,7 +41,8 @@ async def ask_ai(
     system_prompt: str | None = None,
     category: str | None = None,
     guild_id: str | None = None,
-    user_id: str | None = None
+    user_id: str | None = None,
+    image_url: str | None = None
 ) -> tuple[str, str]:
     """Send a message to AI and return (response, provider_name)."""
     # 1. Check Rate Limits
@@ -38,7 +60,7 @@ async def ask_ai(
     channel_prompt = await database.get_channel_prompt(str(channel_id))
     forced_provider = await database.get_channel_provider(str(channel_id))
     
-    # Store user message in DB
+    # Store user message in DB (keep as text for simple DB storage)
     await database.add_message(str(channel_id), "user", f"{user_name}: {message}", category=category)
 
     history = await get_history(channel_id)
@@ -47,7 +69,11 @@ async def ask_ai(
     # 1. Parameter system_prompt (from specialized cogs like code review)
     # 2. Database channel_prompt
     # 3. Global config system prompt
-    prompt = system_prompt or channel_prompt or config.SYSTEM_PROMPT
+    base_prompt = system_prompt or channel_prompt or config.SYSTEM_PROMPT
+    
+    # Inject Knowledge Base context
+    knowledge_context = get_knowledge_context()
+    prompt = f"{base_prompt}\n{knowledge_context}"
 
     try:
         if forced_provider:
@@ -60,13 +86,26 @@ async def ask_ai(
                 prov_cfg = config.PROVIDERS[forced_provider]
                 model = prov_cfg["model"]
 
+                # Build messages for forced provider
+                messages_payload = [
+                    {"role": "system", "content": prompt},
+                    *history,
+                ]
+
+                # Support vision for forced provider
+                if image_url and history:
+                    last_msg = messages_payload[-1]
+                    if last_msg["role"] == "user":
+                        last_msg_content = last_msg["content"]
+                        last_msg["content"] = [
+                            {"type": "text", "text": last_msg_content},
+                            {"type": "image_url", "image_url": {"url": image_url}}
+                        ]
+
                 response_obj = await client.chat.completions.create(
                     model=model,
                     max_tokens=config.MAX_TOKENS,
-                    messages=[
-                        {"role": "system", "content": prompt},
-                        *history,
-                    ],
+                    messages=messages_payload,
                 )
                 response = response_obj.choices[0].message.content
                 provider_name = forced_provider
@@ -95,11 +134,11 @@ async def ask_ai(
             else:
                 # Fallback to normal chat if forced client not found
                 response, provider_name = await providers.chat(
-                    history, prompt, guild_id=guild_id, channel_id=str(channel_id), user_id=user_id
+                    history, prompt, guild_id=guild_id, channel_id=str(channel_id), user_id=user_id, image_url=image_url
                 )
         else:
             response, provider_name = await providers.chat(
-                history, prompt, guild_id=guild_id, channel_id=str(channel_id), user_id=user_id
+                history, prompt, guild_id=guild_id, channel_id=str(channel_id), user_id=user_id, image_url=image_url
             )
             
         # Store assistant response in DB

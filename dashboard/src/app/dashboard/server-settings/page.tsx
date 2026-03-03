@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
-import { Loader2, Save, RefreshCw, Server, MessageSquare, AlertTriangle, Clock } from "lucide-react";
+import { Loader2, Save, RefreshCw, Server, MessageSquare, AlertTriangle, Clock, HelpCircle } from "lucide-react";
 import { api, type BotStatus, type DiscordChannel, type ServerConfig } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -303,6 +303,40 @@ export default function ServerSettingsPage() {
                 </div>
               </CardContent>
             )}
+          </Card>
+
+          {/* FAQ Settings */}
+          <Card>
+            <CardHeader>
+              <div>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <HelpCircle className="h-5 w-5 text-green-500" />
+                  FAQ Settings
+                </CardTitle>
+                <CardDescription>Configure how the bot handles automated FAQ responses.</CardDescription>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4 pt-0">
+              <Separator className="mb-4" />
+              <div className="space-y-2">
+                <Label>Restrict FAQ to Channel (Optional)</Label>
+                <Select 
+                  value={config.faq_channel_id || "all"} 
+                  onValueChange={(val) => setConfig({...config, faq_channel_id: val === "all" ? "" : val})}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Respond in all channels" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Respond in all channels</SelectItem>
+                    {channels.map(c => (
+                      <SelectItem key={c.id} value={c.id}>#{c.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">If selected, the bot will only listen for and answer FAQs in this specific channel.</p>
+              </div>
+            </CardContent>
           </Card>
 
           <Button onClick={handleSave} disabled={saving} className="w-full" size="lg">
