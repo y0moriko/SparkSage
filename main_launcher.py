@@ -41,17 +41,22 @@ def main():
         except KeyboardInterrupt:
             print("\nShutting down...")
             return
+    else:
+        print(f"  Primary provider: {config.AI_PROVIDER}")
+        print(f"  Fallback chain: {' -> '.join(available) if available else 'none'}")
+        print("=" * 50)
 
-    if not available:
-        print("  WARNING: No AI providers configured. Add at least one API key.")
-        print("  You can configure providers through the dashboard.")
-
-    print(f"  Primary provider: {config.AI_PROVIDER}")
-    print(f"  Fallback chain: {' -> '.join(available) if available else 'none'}")
-    print("=" * 50)
-
-    from bot import bot
-    bot.run(config.DISCORD_TOKEN)
+        from bot import bot
+        try:
+            bot.run(config.DISCORD_TOKEN)
+        except Exception as e:
+            print(f"  ERROR: Bot failed to start: {e}")
+            print("  API server is still running. Use the dashboard to fix settings.")
+            try:
+                api_thread.join()
+            except KeyboardInterrupt:
+                print("\nShutting down...")
+                return
 
 
 if __name__ == "__main__":
