@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useSession } from "next-auth/react";
-import { Loader2, Puzzle, RefreshCw, User, Info, CheckCircle2, XCircle } from "lucide-react";
+import { Loader2, Puzzle, RefreshCw, User, Info, CheckCircle2, XCircle, Plus } from "lucide-react";
 import { api, type PluginItem } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
@@ -15,6 +15,8 @@ export default function PluginsPage() {
   const [plugins, setPlugins] = useState<PluginItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [toggling, setToggling] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const token = (session as { accessToken?: string })?.accessToken;
 
@@ -52,6 +54,30 @@ export default function PluginsPage() {
     }
   }
 
+  async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file || !token) return;
+
+    if (!file.name.endsWith(".zip")) {
+      toast.error("Please upload a .zip file");
+      return;
+    }
+
+    setUploading(true);
+    const toastId = toast.loading("Installing plugin...");
+    
+    try {
+      const res = await api.uploadPlugin(token, file);
+      toast.success(res.message, { id: toastId });
+      fetchPlugins(); // Refresh list
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Upload failed", { id: toastId });
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }
+
   if (loading && plugins.length === 0) {
     return (
       <div className="flex justify-center py-12">
@@ -69,10 +95,28 @@ export default function PluginsPage() {
             Extend SparkSage with community-contributed cogs and features.
           </p>
         </div>
-        <Button variant="outline" size="sm" onClick={fetchPlugins} disabled={loading}>
-          <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-          Refresh
-        </Button>
+        <div className="flex gap-2">
+          <input
+            type="file"
+            accept=".zip"
+            className="hidden"
+            ref={fileInputRef}
+            onChange={handleFileUpload}
+          />
+          <Button 
+            variant="default" 
+            size="sm" 
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+          >
+            {uploading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
+            Install Plugin
+          </Button>
+          <Button variant="outline" size="sm" onClick={fetchPlugins} disabled={loading}>
+            <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+            Refresh
+          </Button>
+        </div>
       </div>
 
       {plugins.length === 0 ? (
@@ -81,8 +125,11 @@ export default function PluginsPage() {
             <Puzzle className="h-12 w-12 text-muted-foreground mb-4 opacity-20" />
             <h3 className="font-semibold text-lg">No plugins discovered</h3>
             <p className="text-muted-foreground max-w-sm mb-6">
-              Drop your plugin folders into the <code>sparksage/plugins/</code> directory to see them here.
+              Upload a plugin ZIP or drop your plugin folders into the <code>sparksage/plugins/</code> directory.
             </p>
+            <Button variant="outline" onClick={() => fileInputRef.current?.click()}>
+              Install your first plugin
+            </Button>
           </CardContent>
         </Card>
       ) : (
@@ -141,12 +188,23 @@ export default function PluginsPage() {
       <Card className="bg-muted/50 border-none shadow-none">
         <CardContent className="pt-6 flex gap-4">
           <Info className="h-5 w-5 text-muted-foreground shrink-0 mt-0.5" />
-          <div className="space-y-1 text-sm">
-            <p className="font-medium text-foreground">How do plugins work?</p>
+          <div className="space-y-3 text-sm">
+            <p className="font-medium text-foreground text-base">New to Plugins?</p>
             <p className="text-muted-foreground leading-relaxed">
-              Plugins are self-contained folders inside <code>sparksage/plugins/</code>. 
-              Each folder must contain a <code>manifest.json</code> and a Python cog file.
-              Enabled plugins are loaded into the bot instantly and can be managed here or via <code>/plugin</code> commands in Discord.
+              SparkSage plugins are special "Add-ons" that give your bot new abilities. 
+              Because SparkSage is built with Python, it only accepts plugins designed specifically for this bot.
+            </p>
+            <div className="grid gap-2 text-xs bg-background/50 p-3 rounded-md border border-border">
+              <p className="font-semibold text-primary">Requirement Checklist:</p>
+              <ul className="list-disc pl-4 space-y-1 text-muted-foreground">
+                <li>Must be a <strong>.zip</strong> file containing a folder.</li>
+                <li>Must contain a <strong>manifest.json</strong> file (the "ID card" of the plugin).</li>
+                <li>Must contain a <strong>.py</strong> file (the Python code).</li>
+                <li>JavaScript (.js) or other bot formats (like RedBot or MEE6) are not compatible.</li>
+              </ul>
+            </div>
+            <p className="text-muted-foreground italic">
+              Tip: If you found a plugin online in another language (like JavaScript), ask the bot developer or an AI to help you "port" it to a SparkSage Python Cog!
             </p>
           </div>
         </CardContent>

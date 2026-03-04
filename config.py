@@ -13,7 +13,7 @@ AI_PROVIDER = os.getenv("AI_PROVIDER", "gemini").lower()
 
 # Free providers
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash-lite")
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
@@ -71,7 +71,7 @@ DASHBOARD_PORT = int(os.getenv("DASHBOARD_PORT", "8000"))
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "")
 DISCORD_CLIENT_ID = os.getenv("DISCORD_CLIENT_ID", "")
 DISCORD_CLIENT_SECRET = os.getenv("DISCORD_CLIENT_SECRET", "")
-JWT_SECRET = os.getenv("JWT_SECRET", "sparksage-dev-secret-change-me")
+JWT_SECRET = os.getenv("JWT_SECRET", "sparksage-dev-secret-change-me-at-least-32-chars")
 
 
 def _build_providers() -> dict:

@@ -385,6 +385,16 @@ export const api = {
       token,
     }),
 
+  uploadPlugin: (token: string, file: File) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    return apiFetch<{ status: string; message: string; plugin_id: string }>("/api/plugins/upload", {
+      method: "POST",
+      body: formData,
+      token,
+    });
+  },
+
   // Analytics
   getAnalyticsSummary: (token: string, guildId?: string) =>
     apiFetch<AnalyticsSummary>(`/api/analytics/summary${guildId ? `?guild_id=${guildId}` : ""}`, { token }),

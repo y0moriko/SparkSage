@@ -95,7 +95,8 @@ async def init_db():
         CREATE TABLE IF NOT EXISTS channel_prompts (
             channel_id    TEXT PRIMARY KEY,
             guild_id      TEXT NOT NULL,
-            system_prompt TEXT NOT NULL
+            system_prompt TEXT NOT NULL,
+            updated_at    TEXT DEFAULT (datetime('now'))
         );
 
         CREATE TABLE IF NOT EXISTS channel_providers (
@@ -168,6 +169,23 @@ async def init_db():
     except aiosqlite.OperationalError:
         pass
         
+    # Migration: Add updated_at to channel_prompts
+    try:
+        await db.execute("ALTER TABLE channel_prompts ADD COLUMN updated_at TEXT")
+        await db.execute("UPDATE channel_prompts SET updated_at = datetime('now') WHERE updated_at IS NULL")
+    except aiosqlite.OperationalError:
+        pass
+
+    # Migration: Add requires_input and created_at to custom_commands
+    try:
+        await db.execute("ALTER TABLE custom_commands ADD COLUMN requires_input INTEGER DEFAULT 1")
+    except aiosqlite.OperationalError:
+        pass
+    try:
+        await db.execute("ALTER TABLE custom_commands ADD COLUMN created_at TEXT DEFAULT (datetime('now'))")
+    except aiosqlite.OperationalError:
+        pass
+
     await db.commit()
 
 
@@ -436,19 +454,25 @@ async def set_channel_prompt(channel_id: str, guild_id: str, system_prompt: str)
     """Set a custom system prompt for a channel."""
     db = await get_db()
     await db.execute(
-        "INSERT INTO channel_prompts (channel_id, guild_id, system_prompt) VALUES (?, ?, ?) "
-        "ON CONFLICT(channel_id) DO UPDATE SET system_prompt = excluded.system_prompt",
+        "INSERT INTO channel_prompts (channel_id, guild_id, system_prompt, updated_at) VALUES (?, ?, ?, datetime('now')) "
+        "ON CONFLICT(channel_id) DO UPDATE SET system_prompt = excluded.system_prompt, updated_at = datetime('now')",
         (channel_id, guild_id, system_prompt),
     )
     await db.commit()
 
 
-async def get_channel_prompt(channel_id: str) -> str | None:
-    """Get the custom system prompt for a channel."""
+async def get_channel_prompt_with_time(channel_id: str) -> tuple[str | None, str | None]:
+    """Get the custom system prompt and its last update time for a channel."""
     db = await get_db()
-    cursor = await db.execute("SELECT system_prompt FROM channel_prompts WHERE channel_id = ?", (channel_id,))
+    cursor = await db.execute("SELECT system_prompt, updated_at FROM channel_prompts WHERE channel_id = ?", (channel_id,))
     row = await cursor.fetchone()
-    return row["system_prompt"] if row else None
+    return (row["system_prompt"], row["updated_at"]) if row else (None, None)
+
+
+async def get_channel_prompt(channel_id: str) -> str | None:
+    """Get the custom system prompt for a channel (Legacy wrapper)."""
+    prompt, _ = await get_channel_prompt_with_time(channel_id)
+    return prompt
 
 
 async def delete_channel_prompt(channel_id: str):
