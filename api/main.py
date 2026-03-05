@@ -8,7 +8,8 @@ import db
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await db.init_db()
-    await db.sync_env_to_db()
+    # We no longer sync_env_to_db here. This was overwriting DB values on every boot.
+    # The bot startup handles seeding if the DB is empty.
     yield
     await db.close_db()
 
