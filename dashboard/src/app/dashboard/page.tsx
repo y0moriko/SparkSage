@@ -40,7 +40,7 @@ export default function DashboardOverview() {
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium">Bot Status</CardTitle>
             {botStatus?.online ? (
-              <Wifi className="h-4 w-4 text-green-600" />
+              <Wifi className="h-4 w-4 text-green-600 dark:text-green-400" />
             ) : (
               <WifiOff className="h-4 w-4 text-muted-foreground" />
             )}
@@ -49,7 +49,7 @@ export default function DashboardOverview() {
             {loading ? (
               <p className="text-sm text-muted-foreground">Loading...</p>
             ) : (
-              <Badge variant={botStatus?.online ? "default" : "secondary"}>
+              <Badge variant={botStatus?.online ? "success" : "secondary"}>
                 {botStatus?.online ? "Online" : "Offline"}
               </Badge>
             )}
