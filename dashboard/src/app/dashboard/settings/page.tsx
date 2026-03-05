@@ -125,8 +125,8 @@ export default function SettingsPage() {
           payload[key] = strVal;
         }
       }
-      // Wrap in 'values' key as expected by the API
-      await api.updateConfig(token, { values: payload });
+      // The API helper already wraps this in a 'values' key
+      await api.updateConfig(token, payload);
       toast.success("Settings saved successfully");
       setEditingKeys({}); // Clear editing state
     } catch (err) {
