@@ -40,7 +40,8 @@ def create_token(user_id: str) -> tuple[str, str]:
 def decode_token(token: str) -> dict | None:
     """Decode and validate a JWT token. Returns payload or None."""
     try:
-        payload = jwt.decode(token, config.JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        # Add leeway to handle clock skew (e.g., 30 seconds)
+        payload = jwt.decode(token, config.JWT_SECRET, algorithms=[JWT_ALGORITHM], leeway=30)
         return payload
     except jwt.ExpiredSignatureError:
         print("DEBUG: Token expired")
