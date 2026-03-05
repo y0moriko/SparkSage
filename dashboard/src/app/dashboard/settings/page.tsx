@@ -5,7 +5,7 @@ import { useSession } from "next-auth/react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Loader2, Save, RotateCcw } from "lucide-react";
+import { Loader2, Save, RotateCcw, Edit2, X } from "lucide-react";
 import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -76,6 +76,7 @@ export default function SettingsPage() {
   const { data: session } = useSession();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [editingKeys, setEditingKeys] = useState<Record<string, boolean>>({});
 
   const token = (session as { accessToken?: string })?.accessToken;
 
@@ -119,12 +120,15 @@ export default function SettingsPage() {
       const payload: Record<string, string> = {};
       for (const [key, val] of Object.entries(values)) {
         const strVal = String(val);
-        if (!strVal.startsWith("***")) {
+        // Only include if it's not a masked value OR if the user explicitly enabled editing for it
+        if (!strVal.startsWith("***") || editingKeys[key]) {
           payload[key] = strVal;
         }
       }
-      await api.updateConfig(token, payload);
+      // Wrap in 'values' key as expected by the API
+      await api.updateConfig(token, { values: payload });
       toast.success("Settings saved successfully");
+      setEditingKeys({}); // Clear editing state
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to save settings");
     } finally {
@@ -136,10 +140,17 @@ export default function SettingsPage() {
     form.reset(DEFAULTS);
   }
 
+  const toggleEdit = (key: string) => {
+    setEditingKeys(prev => ({ ...prev, [key]: !prev[key] }));
+    if (!editingKeys[key]) {
+      // Clear the masked value when entering edit mode so they can type a fresh one
+      form.setValue(key as any, "");
+    }
+  };
+
   const maxTokens = form.watch("MAX_TOKENS");
   const rateLimitUser = form.watch("RATE_LIMIT_USER");
   const rateLimitGuild = form.watch("RATE_LIMIT_GUILD");
-  const systemPrompt = form.watch("SYSTEM_PROMPT");
   const welcomeEnabled = form.watch("WELCOME_ENABLED");
   const digestEnabled = form.watch("DIGEST_ENABLED");
   const moderationEnabled = form.watch("MODERATION_ENABLED");
@@ -169,12 +180,23 @@ export default function SettingsPage() {
         {/* Discord */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Discord</CardTitle>
+            <CardTitle className="text-base flex items-center justify-between">
+              Discord
+              <Button type="button" variant="ghost" size="sm" onClick={() => toggleEdit("DISCORD_TOKEN")} className="h-8 w-8 p-0">
+                {editingKeys["DISCORD_TOKEN"] ? <X className="h-4 w-4 text-destructive" /> : <Edit2 className="h-4 w-4" />}
+              </Button>
+            </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="discord-token">Bot Token</Label>
-              <Input id="discord-token" type="password" {...form.register("DISCORD_TOKEN")} />
+              <Input 
+                id="discord-token" 
+                type="password" 
+                {...form.register("DISCORD_TOKEN")} 
+                disabled={!editingKeys["DISCORD_TOKEN"]}
+                placeholder={editingKeys["DISCORD_TOKEN"] ? "Paste new token here..." : "Protected (Click edit to change)"}
+              />
               {form.formState.errors.DISCORD_TOKEN && (
                 <p className="text-xs text-destructive">{form.formState.errors.DISCORD_TOKEN.message}</p>
               )}
@@ -430,8 +452,20 @@ export default function SettingsPage() {
           <CardContent className="space-y-4">
             {[["GEMINI_API_KEY", "Gemini"], ["GROQ_API_KEY", "Groq"], ["OPENROUTER_API_KEY", "OpenRouter"], ["ANTHROPIC_API_KEY", "Anthropic"], ["OPENAI_API_KEY", "OpenAI"]].map(([key, label]) => (
               <div key={key} className="space-y-1">
-                <Label htmlFor={key}>{label}</Label>
-                <Input id={key} type="password" {...form.register(key as any)} className="font-mono text-sm" />
+                <div className="flex items-center justify-between">
+                  <Label htmlFor={key}>{label}</Label>
+                  <Button type="button" variant="ghost" size="sm" onClick={() => toggleEdit(key)} className="h-6 w-6 p-0">
+                    {editingKeys[key] ? <X className="h-3 w-3 text-destructive" /> : <Edit2 className="h-3 w-3" />}
+                  </Button>
+                </div>
+                <Input 
+                  id={key} 
+                  type="password" 
+                  {...form.register(key as any)} 
+                  className="font-mono text-sm" 
+                  disabled={!editingKeys[key]}
+                  placeholder={editingKeys[key] ? "Paste new key here..." : "Protected (Click edit to change)"}
+                />
               </div>
             ))}
           </CardContent>

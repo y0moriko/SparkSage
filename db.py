@@ -231,7 +231,19 @@ async def set_config_bulk(data: dict[str, str]):
         "INSERT INTO config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
         list(data.items()),
     )
+    # Update config version to notify other processes
+    import time
+    version = str(int(time.time()))
+    await db.execute(
+        "INSERT INTO config (key, value) VALUES ('CONFIG_VERSION', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        (version,),
+    )
     await db.commit()
+
+
+async def get_config_version() -> str:
+    """Get the current configuration version."""
+    return await get_config("CONFIG_VERSION", "0")
 
 
 async def sync_env_to_db():
