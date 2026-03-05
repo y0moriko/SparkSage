@@ -215,13 +215,13 @@ async def on_message(message: discord.Message):
 
 
 def main():
-    if not config.DISCORD_TOKEN:
-        print("Error: DISCORD_TOKEN not set. Copy .env.example to .env and fill in your tokens.")
+    if not config.DISCORD_TOKEN or config.DISCORD_TOKEN == "NOT_SET":
+        print("Error: DISCORD_TOKEN not set. Use the Dashboard or edit .env to provide one.")
         return
 
     available = providers.get_available_providers()
     if not available:
-        print("Error: No AI providers configured. Add at least one API key to .env")
+        print("Error: No AI providers configured. Add at least one API key via the Dashboard.")
         print("Free options: GEMINI_API_KEY, GROQ_API_KEY, or OPENROUTER_API_KEY")
         return
 

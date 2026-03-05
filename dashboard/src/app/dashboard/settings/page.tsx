@@ -93,17 +93,20 @@ export default function SettingsPage() {
         const mapped: Partial<SettingsForm> = {};
         for (const key of Object.keys(DEFAULTS) as (keyof SettingsForm)[]) {
           if (config[key] !== undefined) {
+            // If the value is "NOT_SET", we treat it as empty for the form
+            const val = config[key] === "NOT_SET" ? "" : config[key];
+            
             if (key === "MAX_TOKENS" || key === "RATE_LIMIT_USER" || key === "RATE_LIMIT_GUILD") {
-              mapped[key] = Number(config[key]);
+              mapped[key] = Number(val);
             } else if (
               key === "WELCOME_ENABLED" || 
               key === "DIGEST_ENABLED" || 
               key === "MODERATION_ENABLED" ||
               key === "TRANSLATION_ENABLED"
             ) {
-              mapped[key] = String(config[key]).toLowerCase() === "true";
+              mapped[key] = String(val).toLowerCase() === "true";
             } else {
-              (mapped as any)[key] = config[key];
+              (mapped as any)[key] = val;
             }
           }
         }
@@ -120,11 +123,21 @@ export default function SettingsPage() {
       const payload: Record<string, string> = {};
       for (const [key, val] of Object.entries(values)) {
         const strVal = String(val);
-        // Only include if it's not a masked value OR if the user explicitly enabled editing for it
-        if (!strVal.startsWith("***") || editingKeys[key]) {
-          payload[key] = strVal;
+        // Only include if it's not a masked value AND not the NOT_SET sentinel
+        // OR if the user explicitly enabled editing for it (meaning they typed a new value)
+        if (editingKeys[key]) {
+           payload[key] = strVal;
+        } else if (!strVal.startsWith("***") && strVal !== "NOT_SET" && strVal !== "") {
+           payload[key] = strVal;
         }
       }
+      
+      if (Object.keys(payload).length === 0) {
+        toast.info("No changes to save");
+        setSaving(false);
+        return;
+      }
+
       // The API helper already wraps this in a 'values' key
       await api.updateConfig(token, payload);
       toast.success("Settings saved successfully");

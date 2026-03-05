@@ -16,15 +16,21 @@ class SetPrimaryRequest(BaseModel):
 
 @router.get("")
 async def list_providers(user: dict = Depends(get_current_user)):
-    available = providers.get_available_providers()
     result = []
     for name, info in config.PROVIDERS.items():
+        # A provider is configured if it's in the built clients AND its key isn't NOT_SET
+        is_configured = (
+            info["api_key"] is not None and 
+            info["api_key"] != "" and 
+            info["api_key"] != "NOT_SET"
+        )
+        
         result.append({
             "name": name,
             "display_name": info["name"],
             "model": info["model"],
             "free": info["free"],
-            "configured": name in available,
+            "configured": is_configured,
             "is_primary": name == config.AI_PROVIDER,
         })
     return {"providers": result, "fallback_order": providers.FALLBACK_ORDER}
