@@ -10,7 +10,7 @@ import httpx
 def _create_client(provider_name: str) -> AsyncOpenAI | None:
     """Create an OpenAI-compatible client for the given provider."""
     provider = config.PROVIDERS.get(provider_name)
-    if not provider or not provider["api_key"]:
+    if not provider or not provider["api_key"] or provider["api_key"] == "NOT_SET":
         return None
 
     extra_headers = {}
@@ -53,6 +53,8 @@ FALLBACK_ORDER = _build_fallback_order()
 def reload_clients():
     """Rebuild all clients and fallback order from current config."""
     global _clients, FALLBACK_ORDER
+    # CRITICAL: Rebuild the PROVIDERS dict itself first!
+    config.PROVIDERS = config._build_providers()
     _clients = _build_clients()
     FALLBACK_ORDER = _build_fallback_order()
 

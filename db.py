@@ -284,20 +284,26 @@ async def sync_env_to_db():
         "ADMIN_PASSWORD": getattr(cfg, "ADMIN_PASSWORD", ""),
     }
     
-    # Critical keys that should always be synced from .env if they exist there
-    CRITICAL_KEYS = {"ADMIN_PASSWORD", "JWT_SECRET", "DISCORD_TOKEN"}
-    
     db = await get_db()
     existing_config = await get_all_config()
     
     for key, value in env_keys.items():
-        # Update if it's a critical key OR if it doesn't exist in DB yet
-        if key in CRITICAL_KEYS or key not in existing_config:
-            if value: # Only sync non-empty values
-                await db.execute(
-                    "INSERT INTO config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-                    (key, value),
-                )
+        # ONLY update if the key doesn't exist in DB yet OR it's a "NOT_SET" placeholder
+        # This prevents environment variables (which might be defaults) from overwriting 
+        # actual values saved via the Dashboard.
+        db_val = existing_config.get(key)
+        
+        should_sync = (
+            key not in existing_config or 
+            db_val == "NOT_SET" or 
+            db_val == ""
+        )
+        
+        if should_sync and value and value != "NOT_SET":
+            await db.execute(
+                "INSERT INTO config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                (key, value),
+            )
     await db.commit()
 
 
