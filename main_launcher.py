@@ -11,11 +11,29 @@ def start_api_server():
     from api.main import create_app
 
     app = create_app()
-    port = int(os.getenv("DASHBOARD_PORT", "8000"))
+    # Read port from PORT (Railway) or DASHBOARD_PORT (local)
+    port = int(os.getenv("PORT", os.getenv("DASHBOARD_PORT", "8000")))
     uvicorn.run(app, host="0.0.0.0", port=port, log_level="info")
 
 
+async def _load_initial_config():
+    """Load config from DB before starting the bot."""
+    import db
+    import config
+    await db.init_db()
+    all_config = await db.get_all_config()
+    if all_config:
+        config.reload_from_db(all_config)
+        print("  Initial configuration loaded from database.")
+
+
 def main():
+    # Load initial config synchronously using a temp event loop
+    try:
+        asyncio.run(_load_initial_config())
+    except Exception as e:
+        print(f"  WARNING: Failed to load initial config from DB: {e}")
+
     import config
     import providers
 
@@ -28,11 +46,12 @@ def main():
     # Start FastAPI in background thread
     api_thread = threading.Thread(target=start_api_server, daemon=True)
     api_thread.start()
-    port = int(os.getenv("DASHBOARD_PORT", "8000"))
+    port = int(os.getenv("PORT", os.getenv("DASHBOARD_PORT", "8000")))
     print(f"  API server starting on http://localhost:{port}")
 
     # Start Discord bot in main thread
-    if not config.DISCORD_TOKEN:
+    # Note: Check for both empty and "NOT_SET" sentinel
+    if not config.DISCORD_TOKEN or config.DISCORD_TOKEN == "NOT_SET":
         print("  WARNING: DISCORD_TOKEN not set — bot will not start.")
         print("  API server is running. Use the dashboard to configure the bot.")
         # Keep main thread alive for the API server
