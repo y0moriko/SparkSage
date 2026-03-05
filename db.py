@@ -186,6 +186,12 @@ async def init_db():
     except aiosqlite.OperationalError:
         pass
 
+    # Migration: Add faq_channel_id to guild_config
+    try:
+        await db.execute("ALTER TABLE guild_config ADD COLUMN faq_channel_id TEXT")
+    except aiosqlite.OperationalError:
+        pass
+
     await db.commit()
 
 
