@@ -20,16 +20,20 @@ class Prompts(commands.Cog):
     @app_commands.describe(text="The system prompt defining the AI personality for this channel")
     @has_command_permission()
     async def set_prompt(self, interaction: discord.Interaction, text: str):
+        # Set the prompt in DB
         await database.set_channel_prompt(str(interaction.channel_id), str(interaction.guild_id), text)
+        
         await interaction.response.send_message(
-            f"✅ Custom system prompt set for this channel.\n**Preview:** {text[:100]}...", 
+            f"✅ Custom system prompt set for this channel. The new persona will be applied to future messages.\n**Preview:** {text[:100]}...", 
             ephemeral=True
         )
 
     @prompt_group.command(name="reset", description="Reset to the global default system prompt")
     @has_command_permission()
     async def reset_prompt(self, interaction: discord.Interaction):
+        # Delete from DB
         await database.delete_channel_prompt(str(interaction.channel_id))
+        
         await interaction.response.send_message("✅ Reset to global default system prompt.", ephemeral=True)
 
     provider_group = app_commands.Group(

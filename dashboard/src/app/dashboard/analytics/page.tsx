@@ -448,13 +448,13 @@ export default function AnalyticsPage() {
                       cx="50%"
                       cy="50%"
                       outerRadius={80}
-                      label={({ provider, cost }) => `${provider}: $${cost.toFixed(3)}`}
+                      label={({ payload }) => `${payload.provider}: $${payload.cost.toFixed(3)}`}
                     >
                       {costs?.provider_costs.map((entry, index) => (
                         <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                       ))}
                     </Pie>
-                    <Tooltip formatter={(val: number) => `$${val.toFixed(4)}`} />
+                    <Tooltip formatter={(val: number | undefined) => `$${(val ?? 0).toFixed(4)}`} />
                     <Legend />
                   </PieChart>
                 </ResponsiveContainer>
@@ -475,10 +475,10 @@ export default function AnalyticsPage() {
                       tickFormatter={(val) => format(new Date(val), "MMM d")}
                       fontSize={12} 
                     />
-                    <YAxis fontSize={12} tickFormatter={(val) => `$${val.toFixed(2)}`} />
+                    <YAxis fontSize={12} tickFormatter={(val: number | undefined) => `$${(val ?? 0).toFixed(2)}`} />
                     <Tooltip 
                       labelFormatter={(val) => format(new Date(val), "PPPP")}
-                      formatter={(val: number) => [`$${val.toFixed(4)}`, "Cost"]}
+                      formatter={(val: number | undefined) => [`$${(val ?? 0).toFixed(4)}`, "Cost"]}
                     />
                     <Bar dataKey="cost" fill="#10b981" radius={[4, 4, 0, 0]} />
                   </BarChart>

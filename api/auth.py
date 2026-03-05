@@ -5,8 +5,8 @@ import jwt
 import datetime
 import hashlib
 import secrets
+import config
 
-JWT_SECRET = os.getenv("JWT_SECRET", "sparksage-dev-secret-change-me")
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRY_HOURS = 24
 
@@ -33,16 +33,22 @@ def create_token(user_id: str) -> tuple[str, str]:
         "exp": expires,
         "iat": datetime.datetime.now(datetime.timezone.utc),
     }
-    token = jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
+    token = jwt.encode(payload, config.JWT_SECRET, algorithm=JWT_ALGORITHM)
     return token, expires.isoformat()
 
 
 def decode_token(token: str) -> dict | None:
     """Decode and validate a JWT token. Returns payload or None."""
     try:
-        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        # Add leeway to handle clock skew (e.g., 30 seconds)
+        payload = jwt.decode(token, config.JWT_SECRET, algorithms=[JWT_ALGORITHM], leeway=30)
         return payload
     except jwt.ExpiredSignatureError:
+        print("DEBUG: Token expired")
         return None
-    except jwt.InvalidTokenError:
+    except jwt.InvalidTokenError as e:
+        print(f"DEBUG: Invalid token: {e}")
+        return None
+    except Exception as e:
+        print(f"DEBUG: Token decode error: {e}")
         return None

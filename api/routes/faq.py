@@ -12,12 +12,12 @@ class FAQCreate(BaseModel):
     answer: str
     match_keywords: str
 
-@router.get("/")
+@router.get("")
 async def list_faqs(user: dict = Depends(get_current_user)):
     faqs = await db.get_faqs()
     return {"faqs": faqs}
 
-@router.post("/")
+@router.post("")
 async def create_faq(body: FAQCreate, user: dict = Depends(get_current_user)):
     await db.add_faq(
         body.guild_id, 

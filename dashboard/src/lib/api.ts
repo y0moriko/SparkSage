@@ -177,6 +177,7 @@ export interface AnalyticsEvent {
   provider: string | null;
   tokens_used: number | null;
   latency_ms: number | null;
+  estimated_cost: number | null; // Added this line
   created_at: string;
 }
 
@@ -383,6 +384,16 @@ export const api = {
       body: JSON.stringify({ id: pluginId, enabled }),
       token,
     }),
+
+  uploadPlugin: (token: string, file: File) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    return apiFetch<{ status: string; message: string; plugin_id: string }>("/api/plugins/upload", {
+      method: "POST",
+      body: formData,
+      token,
+    });
+  },
 
   // Analytics
   getAnalyticsSummary: (token: string, guildId?: string) =>

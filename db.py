@@ -95,7 +95,8 @@ async def init_db():
         CREATE TABLE IF NOT EXISTS channel_prompts (
             channel_id    TEXT PRIMARY KEY,
             guild_id      TEXT NOT NULL,
-            system_prompt TEXT NOT NULL
+            system_prompt TEXT NOT NULL,
+            updated_at    TEXT DEFAULT (datetime('now'))
         );
 
         CREATE TABLE IF NOT EXISTS channel_providers (
@@ -168,6 +169,29 @@ async def init_db():
     except aiosqlite.OperationalError:
         pass
         
+    # Migration: Add updated_at to channel_prompts
+    try:
+        await db.execute("ALTER TABLE channel_prompts ADD COLUMN updated_at TEXT")
+        await db.execute("UPDATE channel_prompts SET updated_at = datetime('now') WHERE updated_at IS NULL")
+    except aiosqlite.OperationalError:
+        pass
+
+    # Migration: Add requires_input and created_at to custom_commands
+    try:
+        await db.execute("ALTER TABLE custom_commands ADD COLUMN requires_input INTEGER DEFAULT 1")
+    except aiosqlite.OperationalError:
+        pass
+    try:
+        await db.execute("ALTER TABLE custom_commands ADD COLUMN created_at TEXT DEFAULT (datetime('now'))")
+    except aiosqlite.OperationalError:
+        pass
+
+    # Migration: Add faq_channel_id to guild_config
+    try:
+        await db.execute("ALTER TABLE guild_config ADD COLUMN faq_channel_id TEXT")
+    except aiosqlite.OperationalError:
+        pass
+
     await db.commit()
 
 
@@ -207,7 +231,19 @@ async def set_config_bulk(data: dict[str, str]):
         "INSERT INTO config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
         list(data.items()),
     )
+    # Update config version to notify other processes
+    import time
+    version = str(int(time.time()))
+    await db.execute(
+        "INSERT INTO config (key, value) VALUES ('CONFIG_VERSION', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        (version,),
+    )
     await db.commit()
+
+
+async def get_config_version() -> str:
+    """Get the current configuration version."""
+    return await get_config("CONFIG_VERSION", "0")
 
 
 async def sync_env_to_db():
@@ -248,20 +284,26 @@ async def sync_env_to_db():
         "ADMIN_PASSWORD": getattr(cfg, "ADMIN_PASSWORD", ""),
     }
     
-    # Critical keys that should always be synced from .env if they exist there
-    CRITICAL_KEYS = {"ADMIN_PASSWORD", "JWT_SECRET", "DISCORD_TOKEN"}
-    
     db = await get_db()
     existing_config = await get_all_config()
     
     for key, value in env_keys.items():
-        # Update if it's a critical key OR if it doesn't exist in DB yet
-        if key in CRITICAL_KEYS or key not in existing_config:
-            if value: # Only sync non-empty values
-                await db.execute(
-                    "INSERT INTO config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-                    (key, value),
-                )
+        # ONLY update if the key doesn't exist in DB yet OR it's a "NOT_SET" placeholder
+        # This prevents environment variables (which might be defaults) from overwriting 
+        # actual values saved via the Dashboard.
+        db_val = existing_config.get(key)
+        
+        should_sync = (
+            key not in existing_config or 
+            db_val == "NOT_SET" or 
+            db_val == ""
+        )
+        
+        if should_sync and value and value != "NOT_SET":
+            await db.execute(
+                "INSERT INTO config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                (key, value),
+            )
     await db.commit()
 
 
@@ -436,19 +478,25 @@ async def set_channel_prompt(channel_id: str, guild_id: str, system_prompt: str)
     """Set a custom system prompt for a channel."""
     db = await get_db()
     await db.execute(
-        "INSERT INTO channel_prompts (channel_id, guild_id, system_prompt) VALUES (?, ?, ?) "
-        "ON CONFLICT(channel_id) DO UPDATE SET system_prompt = excluded.system_prompt",
+        "INSERT INTO channel_prompts (channel_id, guild_id, system_prompt, updated_at) VALUES (?, ?, ?, datetime('now')) "
+        "ON CONFLICT(channel_id) DO UPDATE SET system_prompt = excluded.system_prompt, updated_at = datetime('now')",
         (channel_id, guild_id, system_prompt),
     )
     await db.commit()
 
 
-async def get_channel_prompt(channel_id: str) -> str | None:
-    """Get the custom system prompt for a channel."""
+async def get_channel_prompt_with_time(channel_id: str) -> tuple[str | None, str | None]:
+    """Get the custom system prompt and its last update time for a channel."""
     db = await get_db()
-    cursor = await db.execute("SELECT system_prompt FROM channel_prompts WHERE channel_id = ?", (channel_id,))
+    cursor = await db.execute("SELECT system_prompt, updated_at FROM channel_prompts WHERE channel_id = ?", (channel_id,))
     row = await cursor.fetchone()
-    return row["system_prompt"] if row else None
+    return (row["system_prompt"], row["updated_at"]) if row else (None, None)
+
+
+async def get_channel_prompt(channel_id: str) -> str | None:
+    """Get the custom system prompt for a channel (Legacy wrapper)."""
+    prompt, _ = await get_channel_prompt_with_time(channel_id)
+    return prompt
 
 
 async def delete_channel_prompt(channel_id: str):

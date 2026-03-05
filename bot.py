@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 import config
 import providers
 import db as database
@@ -14,11 +14,15 @@ class SparkSageBot(commands.Bot):
         intents.message_content = True
         intents.members = True
         super().__init__(command_prefix=config.BOT_PREFIX, intents=intents)
+        self.config_version = "0"
 
     async def setup_hook(self):
         # Initialize database first
         await database.init_db()
         await database.sync_env_to_db()
+        
+        # Initial config version
+        self.config_version = await database.get_config_version()
 
         # Load cogs
         initial_extensions = [
@@ -50,6 +54,31 @@ class SparkSageBot(commands.Bot):
 
         # Load community plugins
         await load_enabled_plugins(self)
+        
+        # Start background tasks
+        self.config_check_task.start()
+
+    async def reload_config(self):
+        """Reload configuration from database."""
+        all_config = await database.get_all_config()
+        config.reload_from_db(all_config)
+        providers.reload_clients()
+        
+        # Update command prefix if it changed
+        self.command_prefix = config.BOT_PREFIX
+        print(f"Bot configuration reloaded (Version: {self.config_version})")
+
+    @tasks.loop(seconds=30)
+    async def config_check_task(self):
+        """Periodically check if configuration has been updated via the dashboard."""
+        new_version = await database.get_config_version()
+        if new_version != self.config_version:
+            self.config_version = new_version
+            await self.reload_config()
+
+    @config_check_task.before_loop
+    async def before_config_check(self):
+        await self.wait_until_ready()
 
 bot = SparkSageBot()
 
@@ -186,13 +215,13 @@ async def on_message(message: discord.Message):
 
 
 def main():
-    if not config.DISCORD_TOKEN:
-        print("Error: DISCORD_TOKEN not set. Copy .env.example to .env and fill in your tokens.")
+    if not config.DISCORD_TOKEN or config.DISCORD_TOKEN == "NOT_SET":
+        print("Error: DISCORD_TOKEN not set. Use the Dashboard or edit .env to provide one.")
         return
 
     available = providers.get_available_providers()
     if not available:
-        print("Error: No AI providers configured. Add at least one API key to .env")
+        print("Error: No AI providers configured. Add at least one API key via the Dashboard.")
         print("Free options: GEMINI_API_KEY, GROQ_API_KEY, or OPENROUTER_API_KEY")
         return
 

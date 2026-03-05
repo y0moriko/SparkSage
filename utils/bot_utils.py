@@ -7,10 +7,23 @@ from utils.rate_limiter import limiter
 MAX_HISTORY = 20
 
 
-async def get_history(channel_id: int) -> list[dict]:
-    """Get conversation history for a channel from the database."""
-    messages = await database.get_messages(str(channel_id), limit=MAX_HISTORY)
-    return [{"role": m["role"], "content": m["content"]} for m in messages]
+async def get_history(channel_id: str, since: str | None = None) -> list[dict]:
+    """Get conversation history for a channel, optionally since a specific timestamp."""
+    db = await database.get_db()
+    
+    query = "SELECT role, content FROM conversations WHERE channel_id = ?"
+    params = [channel_id]
+    
+    if since:
+        query += " AND created_at >= ?"
+        params.append(since)
+        
+    query += " ORDER BY id DESC LIMIT ?"
+    params.append(MAX_HISTORY)
+    
+    cursor = await db.execute(query, params)
+    rows = await cursor.fetchall()
+    return [{"role": row["role"], "content": row["content"]} for row in reversed(rows)]
 
 
 def get_knowledge_context() -> str:
@@ -57,13 +70,14 @@ async def ask_ai(
             return f"⚠️ This server has reached its AI rate limit. Please try again in {retry_after}s.", "none"
 
     # Check for channel-specific prompt and provider
-    channel_prompt = await database.get_channel_prompt(str(channel_id))
+    channel_prompt, prompt_updated_at = await database.get_channel_prompt_with_time(str(channel_id))
     forced_provider = await database.get_channel_provider(str(channel_id))
     
-    # Store user message in DB (keep as text for simple DB storage)
+    # Store user message in DB
     await database.add_message(str(channel_id), "user", f"{user_name}: {message}", category=category)
 
-    history = await get_history(channel_id)
+    # Get history - ONLY messages since the last prompt change to isolate personas
+    history = await get_history(str(channel_id), since=prompt_updated_at)
     
     # Priority: 
     # 1. Parameter system_prompt (from specialized cogs like code review)
@@ -118,7 +132,7 @@ async def ask_ai(
                 from providers import _calculate_cost
                 cost = _calculate_cost(forced_provider, input_tokens, output_tokens)
                 
-                # Log analytics event manually for forced provider
+                # Log analytics event manually
                 await database.add_analytics_event(
                     event_type="mention",
                     guild_id=guild_id,
@@ -132,7 +146,6 @@ async def ask_ai(
                     latency_ms=latency
                 )
             else:
-                # Fallback to normal chat if forced client not found
                 response, provider_name = await providers.chat(
                     history, prompt, guild_id=guild_id, channel_id=str(channel_id), user_id=user_id, image_url=image_url
                 )
