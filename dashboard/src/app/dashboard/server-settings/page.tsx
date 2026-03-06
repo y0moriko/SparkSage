@@ -1,8 +1,6 @@
-"use client";
-
 import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
-import { Loader2, Save, RefreshCw, Server, MessageSquare, AlertTriangle, Clock, HelpCircle } from "lucide-react";
+import { Loader2, Save, RefreshCw, Server, MessageSquare, AlertTriangle, Clock, HelpCircle, Info, ShieldCheck } from "lucide-react";
 import { api, type BotStatus, type DiscordChannel, type ServerConfig } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -14,6 +12,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { Separator } from "@/components/ui/separator";
+import { Badge } from "@/components/ui/badge";
 
 export default function ServerSettingsPage() {
   const { data: session } = useSession();
@@ -107,13 +106,15 @@ export default function ServerSettingsPage() {
   return (
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
+        <div className="flex items-center gap-3">
           <h1 className="text-2xl font-bold">Server Settings</h1>
-          <p className="text-muted-foreground text-sm">Configure features for a specific Discord server.</p>
+          <Badge variant="secondary" className="bg-purple-500/10 text-purple-600 border-purple-500/20 flex gap-1 items-center">
+            <ShieldCheck className="h-3 w-3" /> Overrides
+          </Badge>
         </div>
         
         <div className="flex items-center gap-2">
-          <Label htmlFor="guild-select" className="shrink-0">Server:</Label>
+          <Label htmlFor="guild-select" className="shrink-0 font-medium">Select Server:</Label>
           <Select value={selectedGuildId} onValueChange={setSelectedGuildId}>
             <SelectTrigger id="guild-select" className="w-[240px]">
               <SelectValue placeholder="Select a server" />
@@ -130,6 +131,19 @@ export default function ServerSettingsPage() {
         </div>
       </div>
 
+      <Card className="bg-muted/50 border-none shadow-none">
+        <CardContent className="pt-6 flex gap-4">
+          <Info className="h-5 w-5 text-purple-500 shrink-0 mt-0.5" />
+          <div className="text-sm space-y-2">
+            <p className="font-medium">About Server Settings</p>
+            <p className="text-muted-foreground leading-relaxed">
+              Configurations here are <strong>specific to the selected server</strong>. 
+              They take priority over the system-wide <span className="font-medium">Global Settings</span>.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+
       {!config ? (
         <div className="flex justify-center py-12">
           <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -137,7 +151,7 @@ export default function ServerSettingsPage() {
       ) : (
         <div className="space-y-6 pb-12">
           {/* Onboarding */}
-          <Card>
+          <Card className={config.welcome_enabled ? "border-primary/20 bg-primary/5" : ""}>
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
@@ -147,10 +161,13 @@ export default function ServerSettingsPage() {
                   </CardTitle>
                   <CardDescription>Automatically greet new members when they join.</CardDescription>
                 </div>
-                <Switch 
-                  checked={config.welcome_enabled} 
-                  onCheckedChange={(val) => setConfig({...config, welcome_enabled: val})} 
-                />
+                <div className="flex items-center gap-3">
+                  {config.welcome_enabled && <Badge variant="outline" className="text-[10px] text-primary bg-primary/10 border-primary/20">Custom Override</Badge>}
+                  <Switch 
+                    checked={config.welcome_enabled} 
+                    onCheckedChange={(val) => setConfig({...config, welcome_enabled: val})} 
+                  />
+                </div>
               </div>
             </CardHeader>
             {config.welcome_enabled && (
@@ -189,7 +206,7 @@ export default function ServerSettingsPage() {
           </Card>
 
           {/* Daily Digest */}
-          <Card>
+          <Card className={config.digest_enabled ? "border-primary/20 bg-primary/5" : ""}>
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
@@ -199,10 +216,13 @@ export default function ServerSettingsPage() {
                   </CardTitle>
                   <CardDescription>AI-generated summary of server activity posted daily.</CardDescription>
                 </div>
-                <Switch 
-                  checked={config.digest_enabled} 
-                  onCheckedChange={(val) => setConfig({...config, digest_enabled: val})} 
-                />
+                <div className="flex items-center gap-3">
+                  {config.digest_enabled && <Badge variant="outline" className="text-[10px] text-primary bg-primary/10 border-primary/20">Custom Override</Badge>}
+                  <Switch 
+                    checked={config.digest_enabled} 
+                    onCheckedChange={(val) => setConfig({...config, digest_enabled: val})} 
+                  />
+                </div>
               </div>
             </CardHeader>
             {config.digest_enabled && (
@@ -243,7 +263,7 @@ export default function ServerSettingsPage() {
           </Card>
 
           {/* Moderation */}
-          <Card>
+          <Card className={config.moderation_enabled ? "border-primary/20 bg-primary/5" : ""}>
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
@@ -253,10 +273,13 @@ export default function ServerSettingsPage() {
                   </CardTitle>
                   <CardDescription>Flag potentially toxic messages for review.</CardDescription>
                 </div>
-                <Switch 
-                  checked={config.moderation_enabled} 
-                  onCheckedChange={(val) => setConfig({...config, moderation_enabled: val})} 
-                />
+                <div className="flex items-center gap-3">
+                  {config.moderation_enabled && <Badge variant="outline" className="text-[10px] text-primary bg-primary/10 border-primary/20">Custom Override</Badge>}
+                  <Switch 
+                    checked={config.moderation_enabled} 
+                    onCheckedChange={(val) => setConfig({...config, moderation_enabled: val})} 
+                  />
+                </div>
               </div>
             </CardHeader>
             {config.moderation_enabled && (
