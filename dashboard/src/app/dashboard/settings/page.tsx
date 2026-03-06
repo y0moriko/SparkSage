@@ -1,11 +1,9 @@
-"use client";
-
 import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Loader2, Save, RotateCcw, Edit2, X } from "lucide-react";
+import { Loader2, Save, RotateCcw, Edit2, X, Globe, Info, ExternalLink } from "lucide-react";
 import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,6 +14,8 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { toast } from "sonner";
+import { Badge } from "@/components/ui/badge";
+import Link from "next/link";
 
 const settingsSchema = z.object({
   DISCORD_TOKEN: z.string().min(1, "Discord token is required"),
@@ -191,13 +191,34 @@ export default function SettingsPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Settings</h1>
+        <div className="flex items-center gap-3">
+          <h1 className="text-2xl font-bold">Global Settings</h1>
+          <Badge variant="secondary" className="bg-blue-500/10 text-blue-600 border-blue-500/20 flex gap-1 items-center">
+            <Globe className="h-3 w-3" /> System-Wide
+          </Badge>
+        </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={handleReset}>
             <RotateCcw className="mr-1 h-3 w-3" /> Reset to Defaults
           </Button>
         </div>
       </div>
+
+      <Card className="bg-muted/50 border-none shadow-none">
+        <CardContent className="pt-6 flex gap-4">
+          <Info className="h-5 w-5 text-blue-500 shrink-0 mt-0.5" />
+          <div className="text-sm space-y-2">
+            <p className="font-medium">About Global Settings</p>
+            <p className="text-muted-foreground leading-relaxed">
+              These are the <strong>fallback configurations</strong> for your bot. 
+              They apply to every server the bot is in unless you override them with 
+              <Link href="/dashboard/server-settings" className="text-primary font-medium hover:underline inline-flex items-center ml-1 gap-0.5">
+                Server Settings <ExternalLink className="h-3 w-3" />
+              </Link>.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
 
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 pb-12">
         {/* Discord */}
@@ -230,8 +251,13 @@ export default function SettingsPage() {
         {/* Onboarding Settings */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">New Member Onboarding</CardTitle>
-            <CardDescription>Configure how the bot greets new members.</CardDescription>
+            <div className="flex justify-between items-start">
+              <div>
+                <CardTitle className="text-base">New Member Onboarding</CardTitle>
+                <CardDescription>Default greeting for new members across all servers.</CardDescription>
+              </div>
+              <Badge variant="outline" className="text-[10px] opacity-70">Global Default</Badge>
+            </div>
           </CardHeader>
           <CardContent className="space-y-6">
             <div className="space-y-3">
@@ -257,6 +283,7 @@ export default function SettingsPage() {
                 <div className="space-y-2">
                   <Label htmlFor="welcome-channel">Welcome Channel ID</Label>
                   <Input id="welcome-channel" placeholder="e.g. 1234567890..." {...form.register("WELCOME_CHANNEL_ID")} />
+                  <p className="text-[10px] text-muted-foreground">It is recommended to set this per-server in <Link href="/dashboard/server-settings" className="text-primary hover:underline">Server Settings</Link>.</p>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="welcome-message">Welcome Message Template</Label>
@@ -270,8 +297,13 @@ export default function SettingsPage() {
         {/* Daily Digest Settings */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Daily Digest</CardTitle>
-            <CardDescription>Automatically summarize and post daily server activity.</CardDescription>
+            <div className="flex justify-between items-start">
+              <div>
+                <CardTitle className="text-base">Daily Digest</CardTitle>
+                <CardDescription>Default summarization settings for all servers.</CardDescription>
+              </div>
+              <Badge variant="outline" className="text-[10px] opacity-70">Global Default</Badge>
+            </div>
           </CardHeader>
           <CardContent className="space-y-6">
             <div className="space-y-3">
@@ -310,8 +342,13 @@ export default function SettingsPage() {
         {/* AI Moderation Settings */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">AI Moderation</CardTitle>
-            <CardDescription>Flag potentially toxic or rule-breaking content for review.</CardDescription>
+            <div className="flex justify-between items-start">
+              <div>
+                <CardTitle className="text-base">AI Moderation</CardTitle>
+                <CardDescription>Global moderation policy and log defaults.</CardDescription>
+              </div>
+              <Badge variant="outline" className="text-[10px] opacity-70">Global Default</Badge>
+            </div>
           </CardHeader>
           <CardContent className="space-y-6">
             <div className="space-y-3">
@@ -367,8 +404,13 @@ export default function SettingsPage() {
         {/* Translation Settings */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Auto-Translation</CardTitle>
-            <CardDescription>Automatically detect and translate messages not in the target language.</CardDescription>
+            <div className="flex justify-between items-start">
+              <div>
+                <CardTitle className="text-base">Auto-Translation</CardTitle>
+                <CardDescription>Default translation rules for untracked channels.</CardDescription>
+              </div>
+              <Badge variant="outline" className="text-[10px] opacity-70">Global Default</Badge>
+            </div>
           </CardHeader>
           <CardContent className="space-y-6">
             <div className="space-y-3">
@@ -520,7 +562,7 @@ export default function SettingsPage() {
 
         <Button type="submit" disabled={saving} className="w-full">
           {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-          Save Settings
+          Save Global Settings
         </Button>
       </form>
     </div>
