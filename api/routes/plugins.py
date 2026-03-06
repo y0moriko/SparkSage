@@ -134,6 +134,7 @@ async def delete_plugin(plugin_id: str, user: dict = Depends(get_current_user)):
 
 async def _convert_js_plugin(file: UploadFile):
     """Use AI to convert a JS Discord plugin to a SparkSage Python Cog."""
+    import re
     js_content = (await file.read()).decode("utf-8")
     
     prompt = f"""
@@ -147,6 +148,8 @@ async def _convert_js_plugin(file: UploadFile):
        - "code": The full Python code.
        - "manifest": A valid JSON manifest containing "name", "version", "description", "author", and "cog" (the filename without .py).
 
+    IMPORTANT: Ensure the JSON is valid and all newlines in the Python code are properly escaped as \\n.
+
     JAVASCRIPT CODE:
     {js_content}
     
@@ -159,9 +162,17 @@ async def _convert_js_plugin(file: UploadFile):
             system_prompt="You are an expert developer specializing in porting Discord bots from JS to Python."
         )
         
-        # Parse AI response (strip markdown if present)
-        clean_json = response_text.strip().replace("```json", "").replace("```", "").strip()
-        result = json.loads(clean_json)
+        # Robust JSON extraction: look for { ... }
+        # This handles cases where the LLM includes markdown or preamble text
+        json_match = re.search(r"(\{.*\})", response_text, re.DOTALL)
+        if not json_match:
+            # Fallback to original logic if regex fails
+            clean_json = response_text.strip().replace("```json", "").replace("```", "").strip()
+        else:
+            clean_json = json_match.group(1)
+            
+        # strict=False allows control characters like literal newlines or tabs in strings
+        result = json.loads(clean_json, strict=False)
         
         code = result["code"]
         manifest = result["manifest"]
@@ -185,4 +196,7 @@ async def _convert_js_plugin(file: UploadFile):
         }
 
     except Exception as e:
+        # Log the raw response for debugging in the backend console
+        print(f"AI Conversion Parsing Error: {e}")
+        print(f"Raw AI Response: {response_text}")
         raise HTTPException(status_code=500, detail=f"AI conversion failed: {str(e)}")
