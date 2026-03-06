@@ -140,49 +140,67 @@ async def _convert_js_plugin(file: UploadFile):
     prompt = f"""
     Convert the following JavaScript Discord plugin (discord.js) into a SparkSage-compatible Python Cog (discord.py).
     
+    STRUCTURE YOUR RESPONSE EXACTLY LIKE THIS:
+
+    <<<MANIFEST>>>
+    {{
+        "name": "Plugin Name",
+        "version": "1.0.0",
+        "description": "Short description",
+        "author": "Author Name",
+        "cog": "ClassName"
+    }}
+    <<<END_MANIFEST>>>
+
+    <<<CODE>>>
+    import discord
+    from discord.ext import commands
+    # ... rest of the python code ...
+    <<<END_CODE>>>
+
     REQUIREMENTS:
     1. Use a Python class that inherits from commands.Cog.
-    2. Use standard discord.py command decorators (@commands.command or @app_commands.command).
-    3. Include a 'setup' function at the bottom: async def setup(bot): await bot.add_cog(ClassName(bot)).
-    4. Provide the result as a JSON object with two fields:
-       - "code": The full Python code.
-       - "manifest": A valid JSON manifest containing "name", "version", "description", "author", and "cog" (the filename without .py).
-
-    IMPORTANT: Ensure the JSON is valid and all newlines in the Python code are properly escaped as \\n.
+    2. Include a 'setup' function: async def setup(bot): await bot.add_cog(ClassName(bot)).
+    3. The 'cog' field in manifest must match the filename (without .py).
 
     JAVASCRIPT CODE:
     {js_content}
-    
-    Return ONLY the JSON object.
     """
 
+    response_text = ""
     try:
         response_text, _ = await providers.chat(
             messages=[{"role": "user", "content": prompt}],
             system_prompt="You are an expert developer specializing in porting Discord bots from JS to Python."
         )
         
-        # Robust JSON extraction: look for { ... }
-        # This handles cases where the LLM includes markdown or preamble text
-        json_match = re.search(r"(\{.*\})", response_text, re.DOTALL)
-        if not json_match:
-            # Fallback to original logic if regex fails
-            clean_json = response_text.strip().replace("```json", "").replace("```", "").strip()
+        # Extract Manifest
+        manifest_match = re.search(r"<<<MANIFEST>>>(.*?)<<<END_MANIFEST>>>", response_text, re.DOTALL)
+        # Extract Code
+        code_match = re.search(r"<<<CODE>>>(.*?)<<<END_CODE>>>", response_text, re.DOTALL)
+        
+        if not manifest_match or not code_match:
+            # Fallback to old regex if markers are missing but AI used markdown
+            json_match = re.search(r"(\{.*\})", response_text, re.DOTALL)
+            if json_match:
+                result = json.loads(json_match.group(1), strict=False)
+                code = result.get("code", "")
+                manifest = result.get("manifest", {})
+            else:
+                raise ValueError("Could not find required markers or JSON in AI response.")
         else:
-            clean_json = json_match.group(1)
-            
-        # strict=False allows control characters like literal newlines or tabs in strings
-        result = json.loads(clean_json, strict=False)
+            manifest = json.loads(manifest_match.group(1).strip(), strict=False)
+            code = code_match.group(1).strip()
         
-        code = result["code"]
-        manifest = result["manifest"]
-        
+        if not manifest or not code:
+            raise ValueError("Extracted manifest or code is empty.")
+
         plugin_name = manifest["name"].lower().replace(" ", "_")
         target_dir = PLUGINS_DIR / plugin_name
         target_dir.mkdir(parents=True, exist_ok=True)
         
         # Save code and manifest
-        cog_filename = f"{manifest['cog']}.py"
+        cog_filename = f"{manifest.get('cog', 'plugin')}.py"
         with open(target_dir / cog_filename, "w", encoding="utf-8") as f:
             f.write(code)
             
@@ -196,7 +214,6 @@ async def _convert_js_plugin(file: UploadFile):
         }
 
     except Exception as e:
-        # Log the raw response for debugging in the backend console
         print(f"AI Conversion Parsing Error: {e}")
         print(f"Raw AI Response: {response_text}")
         raise HTTPException(status_code=500, detail=f"AI conversion failed: {str(e)}")
