@@ -9,7 +9,7 @@ import db
 PLUGINS_DIR = Path(__file__).parent
 
 async def get_all_plugins() -> list[dict]:
-    """Scan the plugins directory for valid plugins."""
+    # Scan the plugins directory for valid plugins.
     plugins = []
     if not PLUGINS_DIR.exists():
         return []
