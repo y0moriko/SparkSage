@@ -21,9 +21,8 @@ def _create_client(provider_name: str, api_key: str | None = None) -> AsyncOpenA
     if provider_name == "anthropic":
         extra_headers["anthropic-version"] = "2023-06-01"
     elif provider_name == "openrouter":
-        extra_headers["OpenRouter-Version"] = "2024-07-18"
         extra_headers["HTTP-Referer"] = "https://github.com/SparkSage/sparksage"
-        extra_headers["X-Title"] = "SparkSage"
+        extra_headers["X-OpenRouter-Title"] = "SparkSage"
 
     return AsyncOpenAI(
         base_url=provider["base_url"],
