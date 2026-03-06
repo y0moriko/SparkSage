@@ -19,7 +19,7 @@ GROQ_API_KEY = os.getenv("GROQ_API_KEY", "NOT_SET")
 GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
 
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "NOT_SET")
-OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL", "deepseek/deepseek-r1:free")
+OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL", "openrouter/free")
 
 
 # Paid providers (optional)

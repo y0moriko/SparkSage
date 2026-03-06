@@ -637,6 +637,13 @@ async def set_plugin_status(name: str, enabled: bool):
     await db.commit()
 
 
+async def remove_plugin(name: str):
+    """Remove a plugin record from the database."""
+    db = await get_db()
+    await db.execute("DELETE FROM plugins WHERE name = ?", (name,))
+    await db.commit()
+
+
 async def get_enabled_plugins() -> list[str]:
     """Get list of enabled plugin names."""
     db = await get_db()

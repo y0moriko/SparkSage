@@ -22,7 +22,7 @@ async def get_all_plugins() -> list[dict]:
             manifest_path = item / "manifest.json"
             if manifest_path.exists():
                 try:
-                    with open(manifest_path, "r") as f:
+                    with open(manifest_path, "r", encoding="utf-8-sig") as f:
                         manifest = json.load(f)
                     
                     # Ensure essential fields
@@ -30,6 +30,7 @@ async def get_all_plugins() -> list[dict]:
                         manifest["id"] = item.name
                         manifest["enabled"] = states.get(manifest["id"], False)
                         manifest["path"] = str(item)
+                        manifest["commands"] = manifest.get("commands", [])
                         plugins.append(manifest)
                 except Exception as e:
                     print(f"Error loading manifest for plugin {item.name}: {e}")
@@ -50,7 +51,7 @@ async def load_plugin(bot, plugin_id: str):
         return False, "Manifest not found"
 
     try:
-        with open(manifest_path, "r") as f:
+        with open(manifest_path, "r", encoding="utf-8-sig") as f:
             manifest = json.load(f)
         
         cog_file = manifest["cog"]

@@ -148,6 +148,7 @@ export interface PluginItem {
   cog: string;
   enabled: boolean;
   path: string;
+  commands?: string[];
 }
 
 export interface AnalyticsSummary {
@@ -382,6 +383,12 @@ export const api = {
     apiFetch<{ status: string; message: string }>("/api/plugins/status", {
       method: "PUT",
       body: JSON.stringify({ id: pluginId, enabled }),
+      token,
+    }),
+
+  deletePlugin: (token: string, pluginId: string) =>
+    apiFetch<{ status: string; message: string }>(`/api/plugins/${pluginId}`, {
+      method: "DELETE",
       token,
     }),
 
