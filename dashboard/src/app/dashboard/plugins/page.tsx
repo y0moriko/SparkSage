@@ -9,17 +9,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
 
 export default function PluginsPage() {
   const { data: session } = useSession();
@@ -66,8 +55,12 @@ export default function PluginsPage() {
     }
   }
 
-  async function handleDelete(id: string) {
+  async function handleDelete(id: string, name: string) {
     if (!token) return;
+    
+    const confirmed = window.confirm(`Are you sure you want to delete the plugin '${name}'? This action cannot be undone.`);
+    if (!confirmed) return;
+
     setDeleting(id);
     try {
       const res = await api.deletePlugin(token, id);
@@ -211,27 +204,15 @@ export default function PluginsPage() {
                   </div>
                 </div>
                 
-                <AlertDialog>
-                  <AlertDialogTrigger asChild>
-                    <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive hover:text-destructive hover:bg-destructive/10">
-                      {deleting === plugin.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
-                    </Button>
-                  </AlertDialogTrigger>
-                  <AlertDialogContent>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>Delete Plugin?</AlertDialogTitle>
-                      <AlertDialogDescription>
-                        This will permanently remove <strong>{plugin.name}</strong> and all its associated files. This action cannot be undone.
-                      </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel>Cancel</AlertDialogCancel>
-                      <AlertDialogAction onClick={() => handleDelete(plugin.id)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-                        Delete
-                      </AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="h-6 w-6 text-destructive hover:text-destructive hover:bg-destructive/10"
+                  onClick={() => handleDelete(plugin.id, plugin.name)}
+                  disabled={deleting === plugin.id}
+                >
+                  {deleting === plugin.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                </Button>
               </CardFooter>
             </Card>
           ))}
