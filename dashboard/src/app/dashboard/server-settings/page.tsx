@@ -1,3 +1,5 @@
+"use client";
+
 import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import { Loader2, Save, RefreshCw, Server, MessageSquare, AlertTriangle, Clock, HelpCircle, Info, ShieldCheck } from "lucide-react";
