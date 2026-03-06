@@ -140,7 +140,7 @@ async def _convert_js_plugin(file: UploadFile):
     prompt = f"""
     Convert the following JavaScript Discord plugin (discord.js) into a SparkSage-compatible Python Cog (discord.py).
     
-    STRUCTURE YOUR RESPONSE EXACTLY LIKE THIS:
+    STRUCTURE YOUR RESPONSE EXACTLY LIKE THIS (Use these markers even if you use markdown blocks):
 
     <<<MANIFEST>>>
     {{
@@ -161,7 +161,7 @@ async def _convert_js_plugin(file: UploadFile):
     REQUIREMENTS:
     1. Use a Python class that inherits from commands.Cog.
     2. Include a 'setup' function: async def setup(bot): await bot.add_cog(ClassName(bot)).
-    3. The 'cog' field in manifest must match the filename (without .py).
+    3. The 'cog' field in manifest must match the class name.
 
     JAVASCRIPT CODE:
     {js_content}
@@ -174,23 +174,39 @@ async def _convert_js_plugin(file: UploadFile):
             system_prompt="You are an expert developer specializing in porting Discord bots from JS to Python."
         )
         
-        # Extract Manifest
-        manifest_match = re.search(r"<<<MANIFEST>>>(.*?)<<<END_MANIFEST>>>", response_text, re.DOTALL)
-        # Extract Code
-        code_match = re.search(r"<<<CODE>>>(.*?)<<<END_CODE>>>", response_text, re.DOTALL)
+        # Aggressive Marker Extraction (ignores markdown backticks)
+        manifest_match = re.search(r"<<<MANIFEST>>>\s*(.*?)\s*<<<END_MANIFEST>>>", response_text, re.DOTALL)
+        code_match = re.search(r"<<<CODE>>>\s*(.*?)\s*<<<END_CODE>>>", response_text, re.DOTALL)
         
         if not manifest_match or not code_match:
-            # Fallback to old regex if markers are missing but AI used markdown
-            json_match = re.search(r"(\{.*\})", response_text, re.DOTALL)
-            if json_match:
-                result = json.loads(json_match.group(1), strict=False)
-                code = result.get("code", "")
-                manifest = result.get("manifest", {})
+            # Last ditch effort: try to find JSON and Python code blocks if markers failed
+            json_match = re.search(r"```json\s*(.*?)\s*```", response_text, re.DOTALL)
+            py_match = re.search(r"```python\s*(.*?)\s*```", response_text, re.DOTALL)
+            
+            if json_match and py_match:
+                manifest = json.loads(json_match.group(1).strip(), strict=False)
+                code = py_match.group(1).strip()
             else:
-                raise ValueError("Could not find required markers or JSON in AI response.")
+                # One more try: just look for the first JSON object and everything else as code
+                fallback_json = re.search(r"(\{.*\})", response_text, re.DOTALL)
+                if fallback_json:
+                    manifest = json.loads(fallback_json.group(1), strict=False)
+                    # Use the markers if present but ignore the outer ones
+                    code = response_text.replace(fallback_json.group(0), "")
+                else:
+                    raise ValueError("Could not find required markers, JSON blocks, or any valid structure in AI response.")
         else:
-            manifest = json.loads(manifest_match.group(1).strip(), strict=False)
+            manifest_str = manifest_match.group(1).strip()
+            # Clean manifest of potential markdown
+            manifest_str = re.sub(r"^```json\s*", "", manifest_str)
+            manifest_str = re.sub(r"\s*```$", "", manifest_str)
+            
+            manifest = json.loads(manifest_str, strict=False)
+            
             code = code_match.group(1).strip()
+            # Clean code of potential markdown
+            code = re.sub(r"^```python\s*", "", code)
+            code = re.sub(r"\s*```$", "", code)
         
         if not manifest or not code:
             raise ValueError("Extracted manifest or code is empty.")
