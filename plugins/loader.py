@@ -30,6 +30,7 @@ async def get_all_plugins() -> list[dict]:
                         manifest["id"] = item.name
                         manifest["enabled"] = states.get(manifest["id"], False)
                         manifest["path"] = str(item)
+                        manifest["commands"] = manifest.get("commands", [])
                         plugins.append(manifest)
                 except Exception as e:
                     print(f"Error loading manifest for plugin {item.name}: {e}")

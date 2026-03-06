@@ -148,6 +148,7 @@ export interface PluginItem {
   cog: string;
   enabled: boolean;
   path: string;
+  commands?: string[];
 }
 
 export interface AnalyticsSummary {

@@ -149,7 +149,8 @@ async def _convert_js_plugin(file: UploadFile):
         "version": "1.0.0",
         "description": "Description",
         "author": "Author",
-        "cog": "ClassName"
+        "cog": "filename.py",
+        "commands": ["cmd1", "cmd2"]
     }}
     ```
 

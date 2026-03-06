@@ -181,10 +181,19 @@ export default function PluginsPage() {
                   </div>
                 </div>
               </CardHeader>
-              <CardContent className="pb-4">
+              <CardContent className="pb-4 space-y-3">
                 <p className="text-sm text-muted-foreground line-clamp-2">
                   {plugin.description || "No description provided."}
                 </p>
+                {plugin.commands && plugin.commands.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 pt-1">
+                    {plugin.commands.map((cmd) => (
+                      <Badge key={cmd} variant="outline" className="text-[10px] font-mono bg-background">
+                        /{cmd}
+                      </Badge>
+                    ))}
+                  </div>
+                )}
               </CardContent>
               <CardFooter className="pt-0 flex justify-between items-center text-[10px] text-muted-foreground font-mono">
                 <div className="flex items-center gap-3">
