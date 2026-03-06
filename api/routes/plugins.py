@@ -174,48 +174,68 @@ async def _convert_js_plugin(file: UploadFile):
             system_prompt="You are a specialized bot porting tool. Output only the requested JSON and Python blocks."
         )
         
-        # 1. Try to find the JSON manifest
+        # 1. FUZZY MANIFEST EXTRACTION
         manifest = None
+        # Try markdown blocks first
         json_blocks = re.findall(r"```json\s*(.*?)\s*```", response_text, re.DOTALL)
-        if json_blocks:
-            for block in json_blocks:
-                try:
-                    data = json.loads(block.strip(), strict=False)
-                    if all(k in data for k in ["name", "cog"]):
-                        manifest = data
-                        break
-                except: continue
-        
-        # 2. Try to find the Python code
+        for block in json_blocks:
+            try:
+                data = json.loads(block.strip(), strict=False)
+                if "name" in data:
+                    manifest = data
+                    break
+            except: continue
+            
+        # Fallback to finding the FIRST { ... } pair
+        if not manifest:
+            any_json = re.search(r"(\{.*?\})", response_text, re.DOTALL)
+            if any_json:
+                try: 
+                    manifest = json.loads(any_json.group(1), strict=False)
+                except: pass
+                
+        # 2. FUZZY CODE EXTRACTION
         code = None
+        # Try markdown blocks first
         py_blocks = re.findall(r"```python\s*(.*?)\s*```", response_text, re.DOTALL)
         if py_blocks:
             code = py_blocks[0].strip()
-        
-        # 3. Aggressive Fallback (Markers)
-        if not manifest:
-            # Look for ANY JSON-like object
-            any_json = re.search(r"(\{.*?\})", response_text, re.DOTALL)
-            if any_json:
-                try: manifest = json.loads(any_json.group(1), strict=False)
-                except: pass
-        
-        if not code:
-            # Take the longest block of text that looks like Python
-            lines = response_text.split("\n")
-            py_lines = [l for l in lines if "import " in l or "class " in l or "def " in l or "self." in l]
-            if py_lines:
-                code = response_text # Just take the whole thing as a last resort
+        else:
+            # Look for standard Discord.py imports as markers
+            start_marker = re.search(r"(import discord|from discord)", response_text)
+            if start_marker:
+                code = response_text[start_marker.start():].strip()
+                # Remove manifest if it was appended at the end
+                if manifest:
+                    manifest_str = json.dumps(manifest)
+                    code = code.replace(manifest_str, "").strip()
 
-        if not manifest or not manifest.get("name") or not code:
-            raise ValueError("Incomplete conversion: Missing manifest name or Python code structure.")
+        # 3. SAFETY CHECKS & AUTO-GENERATION
+        if not manifest or not manifest.get("name"):
+            # If AI failed the manifest, try to guess from the code
+            class_match = re.search(r"class\s+(\w+)\(commands\.Cog\):", str(code))
+            guess_name = class_match.group(1) if class_match else "ConvertedPlugin"
+            manifest = {
+                "name": guess_name,
+                "version": "1.0.0-ai",
+                "description": "AI Converted Plugin",
+                "author": "AI Porter",
+                "cog": guess_name
+            }
+
+        if not code or "commands.Cog" not in code:
+            raise ValueError("The AI failed to generate a valid Python Cog structure.")
+
+        # Ensure 'cog' field exists for the filename
+        if "cog" not in manifest:
+            manifest["cog"] = manifest["name"].replace(" ", "")
 
         plugin_name = manifest["name"].lower().replace(" ", "_")
         target_dir = PLUGINS_DIR / plugin_name
         target_dir.mkdir(parents=True, exist_ok=True)
         
         # Save code and manifest
-        cog_filename = f"{manifest.get('cog', 'plugin')}.py"
+        cog_filename = f"{manifest['cog']}.py"
         with open(target_dir / cog_filename, "w", encoding="utf-8") as f:
             f.write(code)
             
@@ -229,6 +249,5 @@ async def _convert_js_plugin(file: UploadFile):
         }
 
     except Exception as e:
-        # Debugging log
-        print(f"FAILED AI RESPONSE:\n{response_text}")
+        print(f"DEBUG - Raw Response:\n{response_text}")
         raise HTTPException(status_code=500, detail=f"AI conversion failed: {str(e)}")
