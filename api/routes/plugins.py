@@ -86,7 +86,7 @@ async def upload_plugin(file: UploadFile = File(...), user: dict = Depends(get_c
                 zip_ref.extractall(temp_path)
                 
                 actual_manifest_path = temp_path / manifest_file
-                with open(actual_manifest_path, "r") as f:
+                with open(actual_manifest_path, "r", encoding="utf-8-sig") as f:
                     manifest = json.load(f)
                 
                 if not all(k in manifest for k in ["name", "version", "cog"]):
