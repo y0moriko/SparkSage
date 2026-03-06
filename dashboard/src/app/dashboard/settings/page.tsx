@@ -37,10 +37,15 @@ const settingsSchema = z.object({
   TRANSLATION_TARGET_LANG: z.string(),
   TRANSLATION_CHANNEL_IDS: z.string(),
   GEMINI_API_KEY: z.string(),
+  GEMINI_MODEL: z.string(),
   GROQ_API_KEY: z.string(),
+  GROQ_MODEL: z.string(),
   OPENROUTER_API_KEY: z.string(),
+  OPENROUTER_MODEL: z.string(),
   ANTHROPIC_API_KEY: z.string(),
+  ANTHROPIC_MODEL: z.string(),
   OPENAI_API_KEY: z.string(),
+  OPENAI_MODEL: z.string(),
 });
 
 type SettingsForm = z.infer<typeof settingsSchema>;
@@ -66,10 +71,15 @@ const DEFAULTS: SettingsForm = {
   TRANSLATION_TARGET_LANG: "English",
   TRANSLATION_CHANNEL_IDS: "",
   GEMINI_API_KEY: "",
+  GEMINI_MODEL: "gemini-2.5-flash",
   GROQ_API_KEY: "",
+  GROQ_MODEL: "llama-3.3-70b-versatile",
   OPENROUTER_API_KEY: "",
+  OPENROUTER_MODEL: "openrouter/free",
   ANTHROPIC_API_KEY: "",
+  ANTHROPIC_MODEL: "claude-3-5-sonnet-20241022",
   OPENAI_API_KEY: "",
+  OPENAI_MODEL: "gpt-4o-mini",
 };
 
 export default function SettingsPage() {
@@ -457,28 +467,52 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
 
-        {/* API Keys */}
+        {/* AI Provider Config */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">API Keys</CardTitle>
+            <CardTitle className="text-base">AI Providers</CardTitle>
+            <CardDescription>Configure API keys and preferred models for each provider.</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            {[["GEMINI_API_KEY", "Gemini"], ["GROQ_API_KEY", "Groq"], ["OPENROUTER_API_KEY", "OpenRouter"], ["ANTHROPIC_API_KEY", "Anthropic"], ["OPENAI_API_KEY", "OpenAI"]].map(([key, label]) => (
-              <div key={key} className="space-y-1">
+          <CardContent className="space-y-8">
+            {[
+              { key: "GEMINI", label: "Google Gemini" },
+              { key: "GROQ", label: "Groq" },
+              { key: "OPENROUTER", label: "OpenRouter" },
+              { key: "ANTHROPIC", label: "Anthropic Claude" },
+              { key: "OPENAI", label: "OpenAI" }
+            ].map(({ key, label }) => (
+              <div key={key} className="space-y-4">
                 <div className="flex items-center justify-between">
-                  <Label htmlFor={key}>{label}</Label>
-                  <Button type="button" variant="ghost" size="sm" onClick={() => toggleEdit(key)} className="h-6 w-6 p-0">
-                    {editingKeys[key] ? <X className="h-3 w-3 text-destructive" /> : <Edit2 className="h-3 w-3" />}
-                  </Button>
+                  <h4 className="text-sm font-semibold">{label}</h4>
                 </div>
-                <Input 
-                  id={key} 
-                  type="password" 
-                  {...form.register(key as any)} 
-                  className="font-mono text-sm" 
-                  disabled={!editingKeys[key]}
-                  placeholder={editingKeys[key] ? "Paste new key here..." : "Protected (Click edit to change)"}
-                />
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor={`${key}_API_KEY`} className="text-xs">API Key</Label>
+                      <Button type="button" variant="ghost" size="sm" onClick={() => toggleEdit(`${key}_API_KEY`)} className="h-5 w-5 p-0">
+                        {editingKeys[`${key}_API_KEY`] ? <X className="h-3 w-3 text-destructive" /> : <Edit2 className="h-3 w-3" />}
+                      </Button>
+                    </div>
+                    <Input 
+                      id={`${key}_API_KEY`} 
+                      type="password" 
+                      {...form.register(`${key}_API_KEY` as any)} 
+                      className="font-mono text-xs" 
+                      disabled={!editingKeys[`${key}_API_KEY`]}
+                      placeholder={editingKeys[`${key}_API_KEY`] ? "Paste new key..." : "Protected (Click edit to change)"}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor={`${key}_MODEL`} className="text-xs">Model ID</Label>
+                    <Input 
+                      id={`${key}_MODEL`} 
+                      {...form.register(`${key}_MODEL` as any)} 
+                      className="font-mono text-xs" 
+                      placeholder="e.g. gpt-4o-mini"
+                    />
+                  </div>
+                </div>
+                <Separator className="mt-4" />
               </div>
             ))}
           </CardContent>
