@@ -140,30 +140,30 @@ async def _convert_js_plugin(file: UploadFile):
     prompt = f"""
     Convert the following JavaScript Discord plugin (discord.js) into a SparkSage-compatible Python Cog (discord.py).
     
-    STRUCTURE YOUR RESPONSE EXACTLY LIKE THIS (Use these markers even if you use markdown blocks):
+    STRUCTURE YOUR RESPONSE AS TWO DISTINCT PARTS:
 
-    <<<MANIFEST>>>
+    1. A JSON MANIFEST block like this:
+    ```json
     {{
         "name": "Plugin Name",
         "version": "1.0.0",
-        "description": "Short description",
-        "author": "Author Name",
+        "description": "Description",
+        "author": "Author",
         "cog": "ClassName"
     }}
-    <<<END_MANIFEST>>>
+    ```
 
-    <<<CODE>>>
+    2. A PYTHON CODE block like this:
+    ```python
     import discord
     from discord.ext import commands
-    # ... rest of the python code ...
-    <<<END_CODE>>>
+    class ClassName(commands.Cog):
+        ...
+    async def setup(bot):
+        await bot.add_cog(ClassName(bot))
+    ```
 
-    REQUIREMENTS:
-    1. Use a Python class that inherits from commands.Cog.
-    2. Include a 'setup' function: async def setup(bot): await bot.add_cog(ClassName(bot)).
-    3. The 'cog' field in manifest must match the class name.
-
-    JAVASCRIPT CODE:
+    JAVASCRIPT CODE TO CONVERT:
     {js_content}
     """
 
@@ -171,45 +171,44 @@ async def _convert_js_plugin(file: UploadFile):
     try:
         response_text, _ = await providers.chat(
             messages=[{"role": "user", "content": prompt}],
-            system_prompt="You are an expert developer specializing in porting Discord bots from JS to Python."
+            system_prompt="You are a specialized bot porting tool. Output only the requested JSON and Python blocks."
         )
         
-        # Aggressive Marker Extraction (ignores markdown backticks)
-        manifest_match = re.search(r"<<<MANIFEST>>>\s*(.*?)\s*<<<END_MANIFEST>>>", response_text, re.DOTALL)
-        code_match = re.search(r"<<<CODE>>>\s*(.*?)\s*<<<END_CODE>>>", response_text, re.DOTALL)
+        # 1. Try to find the JSON manifest
+        manifest = None
+        json_blocks = re.findall(r"```json\s*(.*?)\s*```", response_text, re.DOTALL)
+        if json_blocks:
+            for block in json_blocks:
+                try:
+                    data = json.loads(block.strip(), strict=False)
+                    if all(k in data for k in ["name", "cog"]):
+                        manifest = data
+                        break
+                except: continue
         
-        if not manifest_match or not code_match:
-            # Last ditch effort: try to find JSON and Python code blocks if markers failed
-            json_match = re.search(r"```json\s*(.*?)\s*```", response_text, re.DOTALL)
-            py_match = re.search(r"```python\s*(.*?)\s*```", response_text, re.DOTALL)
-            
-            if json_match and py_match:
-                manifest = json.loads(json_match.group(1).strip(), strict=False)
-                code = py_match.group(1).strip()
-            else:
-                # One more try: just look for the first JSON object and everything else as code
-                fallback_json = re.search(r"(\{.*\})", response_text, re.DOTALL)
-                if fallback_json:
-                    manifest = json.loads(fallback_json.group(1), strict=False)
-                    # Use the markers if present but ignore the outer ones
-                    code = response_text.replace(fallback_json.group(0), "")
-                else:
-                    raise ValueError("Could not find required markers, JSON blocks, or any valid structure in AI response.")
-        else:
-            manifest_str = manifest_match.group(1).strip()
-            # Clean manifest of potential markdown
-            manifest_str = re.sub(r"^```json\s*", "", manifest_str)
-            manifest_str = re.sub(r"\s*```$", "", manifest_str)
-            
-            manifest = json.loads(manifest_str, strict=False)
-            
-            code = code_match.group(1).strip()
-            # Clean code of potential markdown
-            code = re.sub(r"^```python\s*", "", code)
-            code = re.sub(r"\s*```$", "", code)
+        # 2. Try to find the Python code
+        code = None
+        py_blocks = re.findall(r"```python\s*(.*?)\s*```", response_text, re.DOTALL)
+        if py_blocks:
+            code = py_blocks[0].strip()
         
-        if not manifest or not code:
-            raise ValueError("Extracted manifest or code is empty.")
+        # 3. Aggressive Fallback (Markers)
+        if not manifest:
+            # Look for ANY JSON-like object
+            any_json = re.search(r"(\{.*?\})", response_text, re.DOTALL)
+            if any_json:
+                try: manifest = json.loads(any_json.group(1), strict=False)
+                except: pass
+        
+        if not code:
+            # Take the longest block of text that looks like Python
+            lines = response_text.split("\n")
+            py_lines = [l for l in lines if "import " in l or "class " in l or "def " in l or "self." in l]
+            if py_lines:
+                code = response_text # Just take the whole thing as a last resort
+
+        if not manifest or not manifest.get("name") or not code:
+            raise ValueError("Incomplete conversion: Missing manifest name or Python code structure.")
 
         plugin_name = manifest["name"].lower().replace(" ", "_")
         target_dir = PLUGINS_DIR / plugin_name
@@ -230,6 +229,6 @@ async def _convert_js_plugin(file: UploadFile):
         }
 
     except Exception as e:
-        print(f"AI Conversion Parsing Error: {e}")
-        print(f"Raw AI Response: {response_text}")
+        # Debugging log
+        print(f"FAILED AI RESPONSE:\n{response_text}")
         raise HTTPException(status_code=500, detail=f"AI conversion failed: {str(e)}")
