@@ -9,6 +9,8 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from pydantic import BaseModel
 from api.deps import get_current_user
 import db
+import providers
+import config
 from plugins.loader import get_all_plugins, load_plugin, unload_plugin
 
 router = APIRouter()
@@ -23,6 +25,11 @@ class PluginStatusUpdate(BaseModel):
 async def list_plugins(user: dict = Depends(get_current_user)):
     """Return all discovered plugins and their status."""
     plugins = await get_all_plugins()
+    # Ensure they have all needed fields for the UI
+    for p in plugins:
+        p["id"] = p.get("id", p.get("name", "").lower().replace(" ", "_"))
+        p["author"] = p.get("author", "Community")
+        p["description"] = p.get("description", "No description provided.")
     return {"plugins": plugins}
 
 @router.put("/status")
@@ -52,9 +59,12 @@ async def update_plugin_status(body: PluginStatusUpdate, user: dict = Depends(ge
 
 @router.post("/upload")
 async def upload_plugin(file: UploadFile = File(...), user: dict = Depends(get_current_user)):
-    """Upload and install a plugin from a ZIP file."""
+    """Upload and install a plugin from a ZIP or convert a JS file."""
+    if file.filename.endswith(".js"):
+        return await _convert_js_plugin(file)
+    
     if not file.filename.endswith(".zip"):
-        raise HTTPException(status_code=400, detail="Only ZIP files are allowed")
+        raise HTTPException(status_code=400, detail="Only ZIP or JS files are allowed")
 
     # Create a temporary directory to extract and validate
     with tempfile.TemporaryDirectory() as temp_dir:
@@ -67,35 +77,27 @@ async def upload_plugin(file: UploadFile = File(...), user: dict = Depends(get_c
             
         try:
             with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-                # Check for manifest.json in the zip
-                # Some zips might have a top-level folder, others might not
                 file_list = zip_ref.namelist()
                 manifest_file = next((f for f in file_list if f.endswith("manifest.json")), None)
                 
                 if not manifest_file:
                     raise HTTPException(status_code=400, detail="No manifest.json found in ZIP")
                 
-                # Extract to temp dir to read manifest
                 zip_ref.extractall(temp_path)
                 
                 actual_manifest_path = temp_path / manifest_file
                 with open(actual_manifest_path, "r") as f:
                     manifest = json.load(f)
                 
-                # Basic validation
                 if not all(k in manifest for k in ["name", "version", "cog"]):
                     raise HTTPException(status_code=400, detail="Invalid manifest.json: missing required fields")
                 
-                # Determine target folder name (using name from manifest, sanitized)
                 plugin_id = manifest.get("name").lower().replace(" ", "_")
                 target_dir = PLUGINS_DIR / plugin_id
                 
-                # If plugin exists, remove it first (update)
                 if target_dir.exists():
                     shutil.rmtree(target_dir)
                 
-                # Move extracted content to plugins directory
-                # If manifest was inside a folder, we need to move that folder's contents
                 source_dir = actual_manifest_path.parent
                 shutil.copytree(source_dir, target_dir)
                 
@@ -105,3 +107,82 @@ async def upload_plugin(file: UploadFile = File(...), user: dict = Depends(get_c
             raise HTTPException(status_code=400, detail="Invalid ZIP file")
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Failed to install plugin: {str(e)}")
+
+@router.delete("/{plugin_id}")
+async def delete_plugin(plugin_id: str, user: dict = Depends(get_current_user)):
+    """Uninstall a plugin and remove its files."""
+    from bot import bot
+    
+    target_dir = PLUGINS_DIR / plugin_id
+    if not target_dir.exists():
+        raise HTTPException(status_code=404, detail="Plugin not found")
+
+    # Try to unload first if active
+    await unload_plugin(bot, plugin_id)
+    
+    # Remove from DB
+    await db.set_plugin_status(plugin_id, False)
+    
+    # Delete files
+    shutil.rmtree(target_dir)
+    
+    # Sync tree to remove commands
+    if bot.is_ready():
+        bot.loop.create_task(bot.tree.sync())
+
+    return {"status": "ok", "message": f"Plugin '{plugin_id}' deleted successfully"}
+
+async def _convert_js_plugin(file: UploadFile):
+    """Use AI to convert a JS Discord plugin to a SparkSage Python Cog."""
+    js_content = (await file.read()).decode("utf-8")
+    
+    prompt = f"""
+    Convert the following JavaScript Discord plugin (discord.js) into a SparkSage-compatible Python Cog (discord.py).
+    
+    REQUIREMENTS:
+    1. Use a Python class that inherits from commands.Cog.
+    2. Use standard discord.py command decorators (@commands.command or @app_commands.command).
+    3. Include a 'setup' function at the bottom: async def setup(bot): await bot.add_cog(ClassName(bot)).
+    4. Provide the result as a JSON object with two fields:
+       - "code": The full Python code.
+       - "manifest": A valid JSON manifest containing "name", "version", "description", "author", and "cog" (the filename without .py).
+
+    JAVASCRIPT CODE:
+    {js_content}
+    
+    Return ONLY the JSON object.
+    """
+
+    try:
+        response_text, _ = await providers.chat(
+            messages=[{"role": "user", "content": prompt}],
+            system_prompt="You are an expert developer specializing in porting Discord bots from JS to Python."
+        )
+        
+        # Parse AI response (strip markdown if present)
+        clean_json = response_text.strip().replace("```json", "").replace("```", "").strip()
+        result = json.loads(clean_json)
+        
+        code = result["code"]
+        manifest = result["manifest"]
+        
+        plugin_name = manifest["name"].lower().replace(" ", "_")
+        target_dir = PLUGINS_DIR / plugin_name
+        target_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Save code and manifest
+        cog_filename = f"{manifest['cog']}.py"
+        with open(target_dir / cog_filename, "w", encoding="utf-8") as f:
+            f.write(code)
+            
+        with open(target_dir / "manifest.json", "w", encoding="utf-8") as f:
+            json.dump(manifest, f, indent=4)
+            
+        return {
+            "status": "ok", 
+            "message": f"AI converted and installed '{manifest['name']}' successfully!",
+            "plugin_id": plugin_name
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"AI conversion failed: {str(e)}")

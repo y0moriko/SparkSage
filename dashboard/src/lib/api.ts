@@ -385,6 +385,12 @@ export const api = {
       token,
     }),
 
+  deletePlugin: (token: string, pluginId: string) =>
+    apiFetch<{ status: string; message: string }>(`/api/plugins/${pluginId}`, {
+      method: "DELETE",
+      token,
+    }),
+
   uploadPlugin: (token: string, file: File) => {
     const formData = new FormData();
     formData.append("file", file);
