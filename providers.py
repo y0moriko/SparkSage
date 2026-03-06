@@ -7,19 +7,27 @@ import db
 import httpx
 
 
-def _create_client(provider_name: str) -> AsyncOpenAI | None:
+def _create_client(provider_name: str, api_key: str | None = None) -> AsyncOpenAI | None:
     """Create an OpenAI-compatible client for the given provider."""
     provider = config.PROVIDERS.get(provider_name)
-    if not provider or not provider["api_key"] or provider["api_key"] == "NOT_SET":
+    if not provider:
+        return None
+        
+    actual_api_key = api_key or provider.get("api_key")
+    if not actual_api_key or actual_api_key == "NOT_SET":
         return None
 
     extra_headers = {}
     if provider_name == "anthropic":
         extra_headers["anthropic-version"] = "2023-06-01"
+    elif provider_name == "openrouter":
+        extra_headers["OpenRouter-Version"] = "2024-07-18"
+        extra_headers["HTTP-Referer"] = "https://github.com/SparkSage/sparksage"
+        extra_headers["X-Title"] = "SparkSage"
 
     return AsyncOpenAI(
         base_url=provider["base_url"],
-        api_key=provider["api_key"],
+        api_key=actual_api_key,
         default_headers=extra_headers or None,
     )
 
@@ -83,10 +91,9 @@ async def test_provider(name: str, api_key: str | None = None) -> dict:
 
     # Use the provided API key (for wizard) OR the shared client
     if api_key:
-        client = AsyncOpenAI(
-            base_url=provider["base_url"],
-            api_key=api_key,
-        )
+        client = _create_client(name, api_key=api_key)
+        if not client:
+            return {"success": False, "latency_ms": 0, "error": "Invalid API key provided"}
     else:
         client = _clients.get(name)
         if not client:
